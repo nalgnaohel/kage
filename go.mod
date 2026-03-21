@@ -3,6 +3,7 @@ module awesomeProject
 go 1.25.0
 
 require (
+	github.com/tysonmote/gommap v0.0.3
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
 )
