@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"io"
 	"os"
 	"sync"
 )
@@ -18,6 +19,7 @@ const (
 // This ensures that the log can be read correctly on any OS (macOS, Linux or Window).
 var enc = binary.BigEndian
 
+// Segment can be seen as an unit of log storage (log contains multiple segments)
 type Segment struct {
 	log         *os.File
 	index       *Index // using mmap
@@ -25,7 +27,7 @@ type Segment struct {
 	nextOffset  uint64 // next offset to be written
 	maxLogSize  uint64
 	currentSize uint64
-	mu          sync.Mutex // for write-safely when multiple producers send messages at the same time
+	mu          sync.RWMutex // for write-safely when multiple producers send messages at the same time
 }
 
 func (s *Segment) Init(log *os.File, baseOffset, nextOffset, maxLogSize uint64) {
@@ -58,4 +60,34 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	s.currentSize += uint64(len(header) + len(message))
 
 	return curOffset, nil
+}
+
+func (s *Segment) Read(offset uint64) (message []byte, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	relOffset := offset - s.baseOffset
+	_, pos, err := s.index.Read(int64(relOffset))
+	if err != nil {
+		return nil, err
+	}
+
+	header := make([]byte, offsetWidth+lenWidth)
+	if _, err := s.log.ReadAt(header, int64(pos)); err != nil {
+		if err == io.EOF {
+			return nil, io.ErrUnexpectedEOF
+		}
+		return nil, fmt.Errorf("failed to read log header: %w", err)
+	}
+
+	// add recordSize to header
+	// Offset is bytes [0:8], Size is bytes [8:12]
+	recordSize := enc.Uint32(header[offsetWidth:])
+
+	// handle our data from the 12 byte
+	dataPos := int64(pos + uint32(offsetWidth+lenWidth))
+	if _, err := s.log.ReadAt(data, dataPos); err != nil {
+		return nil, fmt.Errorf("failed to read log data: %w", err)
+	}
+	return data, nil
 }

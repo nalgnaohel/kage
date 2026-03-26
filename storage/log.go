@@ -125,3 +125,39 @@ func (l *Log) newSegment(baseOffset uint64) error {
 
 	return nil
 }
+
+// Return the current offset of our log and error if any
+func (l *Log) Append(data []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Check if the current segment is full.
+	// If full, we append log data to new segment
+	if l.activeSegment.currentSize+uint64(len(data)) > l.activeSegment.maxLogSize {
+		if err := l.newSegment(l.activeSegment.nextOffset); err != nil {
+			return 0, err
+		}
+	}
+	return l.activeSegment
+}
+
+// Read logic at the Log level
+func (l *Log) Read(off uint64) ([]byte, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	// 1. Find the segment that contains the offset
+	// We use binary search to find the highest baseOffset <= off
+	idx := sort.Search(len(l.segments), func(i int) bool {
+		// This returns the first segment whose nextOffset is > off
+		return l.segments[i].nextOffset > off
+	})
+
+	// 2. Validation
+	if idx == len(l.segments) || l.segments[idx].baseOffset > off {
+		return nil, fmt.Errorf("offset %d is out of range (current max: %d)", off, l.activeSegment.nextOffset-1)
+	}
+
+	// 3. Delegate to the specific segment
+	return l.segments[idx].Read(off)
+}
