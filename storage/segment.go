@@ -67,11 +67,37 @@ func (s *Segment) Read(offset uint64) (message []byte, err error) {
 	defer s.mu.RUnlock()
 
 	relOffset := offset - s.baseOffset
-	_, pos, err := s.index.Read(int64(relOffset))
+	indexOffset, physicalPos, err := s.index.Read(int64(relOffset))
 	if err != nil {
 		return nil, err
 	}
 
+	// Linear search for the physical position of requested offset
+	pos := physicalPos
+	for {
+		header := make([]byte, offsetWidth+lenWidth)
+		if _, err := s.log.ReadAt(header, currPos); err != nil {
+			return nil, err
+		}
+
+		actualOff := enc.Uint64(header[:offsetWidth])
+		msgSize := enc.Uint32(header[offsetWidth:])
+		if actualOff == off {
+			data := make([]byte, msgSize)
+			if _, err := s.log.ReadAt(data, currPos+int64(offsetWidth+lenWidth)); err != nil {
+				return nil, err
+			}
+			return data, nil
+		}
+
+		// If we passed the offset, it doesn't exist (e.g., requested a deleted offset)
+		if actualOff > off {
+			return nil, fmt.Errorf("offset %d not found", off)
+		}
+
+		// Move to the next message in the log
+		currPos += int64(offsetWidth + lenWidth + msgSize)
+	}
 	header := make([]byte, offsetWidth+lenWidth)
 	if _, err := s.log.ReadAt(header, int64(pos)); err != nil {
 		if err == io.EOF {

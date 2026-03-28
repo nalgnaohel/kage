@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	offWidth = 4                   // 4 bytes for relative offset
-	posWidth = 4                   // 4 bytes for physical position
-	entWidth = offWidth + posWidth // total entry size (8 bytes)
+	offWidth   = 4                   // 4 bytes for relative offset
+	posWidth   = 4                   // 4 bytes for physical position
+	entryWidth = offWidth + posWidth // total entry size (8 bytes)
 )
 
 type Index struct {
@@ -48,23 +48,22 @@ func NewIndex(f *os.File, maxIndexSize uint64) (*Index, error) {
 	return idx, nil
 }
 
-func (i *Index) Write(off uint32, pos uint64) error { // CHANGED: pos is now uint64
+func (i *Index) Write(offset uint32, physicalPos uint64) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	if uint64(len(i.mmap)) < i.size+entWidth {
 		return io.EOF
 	}
-
 	// Write 4-byte relative offset
-	enc.PutUint32(i.mmap[i.size:i.size+offWidth], off)
-	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], pos)
+	enc.PutUint32(i.mmap[i.size:i.size+offWidth], offset)
+	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], physicalPos)
 
 	i.size += uint64(entWidth)
 	return nil
 }
 
-func (i *Index) Read(in int64) (out uint32, pos uint64, err error) { // CHANGED: pos is now uint64
+func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -72,21 +71,39 @@ func (i *Index) Read(in int64) (out uint32, pos uint64, err error) { // CHANGED:
 		return 0, 0, io.EOF
 	}
 
-	var outRange uint64
-	if in == -1 {
-		outRange = i.size - entWidth
-	} else {
-		outRange = uint64(in) * entWidth
+	// Calculate number of entries in the index
+	totalEntries := i.size / uint64(entWidth)
+
+	low := uint64(0)
+	high := totalEntries - 1
+
+	// Binary search on the mmap to find the highest offset <= target
+	for low <= high {
+		mid := low + (high-low)/2
+		physicalPos := mid * uint64(entWidth)
+
+		// Read the relative offset at the middle position
+		offsetAtMid := enc.Uint32(i.mmap[physicalPos : physicalPos+uint64(offWidth)])
+
+		if offsetAtMid == target {
+			// Found exact match
+			actualPhysicalPos := enc.Uint32(i.mmap[physicalPos+uint64(offWidth) : physicalPos+uint64(entWidth)])
+			return offsetAtMid, actualPhysicalPos, nil
+		}
+
+		if offsetAtMid < target {
+			low = mid + 1
+		} else {
+			high = mid - 1
+		}
 	}
 
-	if i.size < outRange+entWidth {
-		return 0, 0, io.EOF
-	}
+	// If no exact match, 'high' is the index of the largest offset < target
+	finalPos := high * uint64(entWidth)
+	offsetVal := enc.Uint32(i.mmap[finalPos : finalPos+uint64(offWidth)])
+	physicalPosVal := enc.Uint32(i.mmap[finalPos+uint64(offWidth) : finalPos+uint64(entWidth)])
 
-	out = enc.Uint32(i.mmap[outRange : outRange+offWidth])
-	// CHANGED: Read 8-byte physical position
-	pos = enc.Uint64(i.mmap[outRange+offWidth : outRange+entWidth])
-	return out, pos, nil
+	return offsetVal, physicalPosVal, nil
 }
 
 // Close ensures the file is truncated to its actual data size and synced
