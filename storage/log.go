@@ -3,12 +3,11 @@ package storage
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Log struct {
@@ -22,8 +21,19 @@ type Log struct {
 }
 
 type Config struct {
-	MaxSegmentSize uint64
-	MaxIndexSize   uint64
+	MaxSegmentSize  uint64
+	MaxIndexSize    uint64
+	RetentionPeriod time.Duration // how long segments are retained before cleanup
+	FlushInterval   time.Duration // how often buffered writes are fsynced to disk
+}
+
+func DefaultConfig() Config {
+	return Config{
+		MaxSegmentSize:  1024 * 1024, // 1 MB
+		MaxIndexSize:    256 * 1024,   // 256 KB
+		RetentionPeriod: 7 * 24 * time.Hour, // 7 days
+		FlushInterval:   500 * time.Millisecond,
+	}
 }
 
 func NewLog(dir string, c Config) (*Log, error) {
@@ -72,54 +82,16 @@ func (l *Log) setup() error {
 
 // newSegment creates a new segment at the given base offset
 func (l *Log) newSegment(baseOffset uint64) error {
-	// 1. Construct file paths using 20-digit zero-padded names (Kafka style)
-	logPath := path.Join(l.Dir, fmt.Sprintf("%020d.log", baseOffset))
-	indexPath := path.Join(l.Dir, fmt.Sprintf("%020d.index", baseOffset))
-
-	// 2. Open or create the log file (Append mode)
-	logFile, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
-	}
-
-	// 3. Open or create the index file
-	indexFile, err := os.OpenFile(indexPath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open index file: %w", err)
-	}
-
-	// 4. Initialize the memory-mapped index
-	idx, err := NewIndex(indexFile, l.Config.MaxIndexSize)
-	if err != nil {
-		return fmt.Errorf("failed to create index: %w", err)
-	}
-
-	// 5. Create the Segment instance
-	s := &Segment{
-		log:        logFile,
-		index:      idx,
-		baseOffset: baseOffset,
-		maxLogSize: l.Config.MaxSegmentSize,
-	}
-
-	// 6. Recovery logic: Calculate the next offset and current size
-	// This handles cases where the Broker restarts and reloads existing files
-	fi, err := logFile.Stat()
+	s, err := NewSegment(l.Dir, baseOffset, SegmentConfig{
+		MaxLogSize:      l.Config.MaxSegmentSize,
+		MaxIndexSize:    l.Config.MaxIndexSize,
+		RetentionPeriod: l.Config.RetentionPeriod,
+		FlushInterval:   l.Config.FlushInterval,
+	})
 	if err != nil {
 		return err
 	}
-	s.currentSize = uint64(fi.Size())
 
-	// Determine nextOffset based on the last index entry
-	if lastOff, _, err := idx.Read(-1); err == nil {
-		// nextOffset is the last recorded relative offset + 1 + baseOffset
-		s.nextOffset = baseOffset + uint64(lastOff) + 1
-	} else {
-		// Index is empty, start from the base
-		s.nextOffset = baseOffset
-	}
-
-	// 7. Update Log manager state
 	l.segments = append(l.segments, s)
 	l.activeSegment = s
 
