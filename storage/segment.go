@@ -91,10 +91,9 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	defer s.mu.Unlock()
 
 	curOffset := s.nextOffset
-	// Write the message size and offset as header
-	header := make([]byte, lenWidth+offsetWidth)
-	enc.PutUint64(header[:lenWidth], uint64(len(message)))
-	enc.PutUint64(header[lenWidth:], curOffset)
+	header := make([]byte, offsetWidth+lenWidth)
+	enc.PutUint64(header[:offsetWidth], curOffset)
+	enc.PutUint32(header[offsetWidth:], uint32(len(message)))
 
 	// Write header and message to the log file
 	if _, err := s.log.Write(header); err != nil {
@@ -119,22 +118,24 @@ func (s *Segment) Read(offset uint64) (message []byte, err error) {
 	defer s.mu.RUnlock()
 
 	relOffset := offset - s.baseOffset
-	indexOffset, physicalPos, err := s.index.Read(int64(relOffset))
+	_, physicalPos, err := s.index.Read(int64(relOffset))
 	if err != nil {
 		return nil, err
 	}
 
-	// Linear search for the physical position of requested offset
-	pos := physicalPos
+	currPos := int64(physicalPos)
 	for {
 		header := make([]byte, offsetWidth+lenWidth)
 		if _, err := s.log.ReadAt(header, currPos); err != nil {
+			if err == io.EOF {
+				return nil, io.ErrUnexpectedEOF
+			}
 			return nil, err
 		}
 
 		actualOff := enc.Uint64(header[:offsetWidth])
 		msgSize := enc.Uint32(header[offsetWidth:])
-		if actualOff == off {
+		if actualOff == offset {
 			data := make([]byte, msgSize)
 			if _, err := s.log.ReadAt(data, currPos+int64(offsetWidth+lenWidth)); err != nil {
 				return nil, err
@@ -142,30 +143,10 @@ func (s *Segment) Read(offset uint64) (message []byte, err error) {
 			return data, nil
 		}
 
-		// If we passed the offset, it doesn't exist (e.g., requested a deleted offset)
-		if actualOff > off {
-			return nil, fmt.Errorf("offset %d not found", off)
+		if actualOff > offset {
+			return nil, fmt.Errorf("offset %d not found", offset)
 		}
 
-		// Move to the next message in the log
-		currPos += int64(offsetWidth + lenWidth + msgSize)
+		currPos += int64(offsetWidth+lenWidth) + int64(msgSize)
 	}
-	header := make([]byte, offsetWidth+lenWidth)
-	if _, err := s.log.ReadAt(header, int64(pos)); err != nil {
-		if err == io.EOF {
-			return nil, io.ErrUnexpectedEOF
-		}
-		return nil, fmt.Errorf("failed to read log header: %w", err)
-	}
-
-	// add recordSize to header
-	// Offset is bytes [0:8], Size is bytes [8:12]
-	recordSize := enc.Uint32(header[offsetWidth:])
-
-	// handle our data from the 12 byte
-	dataPos := int64(pos + uint32(offsetWidth+lenWidth))
-	if _, err := s.log.ReadAt(data, dataPos); err != nil {
-		return nil, fmt.Errorf("failed to read log data: %w", err)
-	}
-	return data, nil
 }

@@ -110,7 +110,8 @@ func (l *Log) Append(data []byte) (int, error) {
 			return 0, err
 		}
 	}
-	return l.activeSegment.Append(data)
+	off, err := l.activeSegment.Append(data)
+	return int(off), err
 }
 
 // Read logic at the Log level

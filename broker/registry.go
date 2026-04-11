@@ -1,5 +1,16 @@
 package broker
 
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/nalgnaohel/kage/storage"
+)
+
 type Registry struct {
 	mu      sync.RWMutex
 	baseDir string
@@ -84,4 +95,34 @@ func (r *Registry) GetLog(topic string, partition int32) (*storage.Log, bool) {
 
 	l, ok := pMap[partition]
 	return l, ok
+}
+
+// CreateLog creates a new partition on disk and register into our Registry
+// (should be thread-safe)
+func (r *Registry) CreateLog(topic string, partition int32) (*storage.Log, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Check if the partition is already existed
+	if partitionMap, existed := r.logs[topic]; existed {
+		return partitionMap[partition], fmt.Errorf("partition %d for topic %s already existed", partition, topic)
+	}
+
+	// Create the partition directory. The directory name should be
+	// of the form data/topic-name-partitionID
+	dirName := fmt.Sprintf("%s-%d", topic, partition)
+	partitionPath := filepath.Join(r.baseDir, dirName)
+
+	// Create a new Log
+	newLog, err := storage.NewLog(partitionPath, r.config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Register the new Log in the registry
+	if r.logs[topic] == nil {
+		r.logs[topic] = make(map[int32]*storage.Log)
+	}
+	r.logs[topic][partition] = newLog
+	return newLog, nil
 }

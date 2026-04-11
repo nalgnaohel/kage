@@ -1,4 +1,4 @@
-module awesomeProject
+module github.com/nalgnaohel/kage
 
 go 1.25.0
 

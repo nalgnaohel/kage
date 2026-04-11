@@ -52,14 +52,13 @@ func (i *Index) Write(offset uint32, physicalPos uint64) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	if uint64(len(i.mmap)) < i.size+entWidth {
+	if uint64(len(i.mmap)) < i.size+entryWidth {
 		return io.EOF
 	}
-	// Write 4-byte relative offset
 	enc.PutUint32(i.mmap[i.size:i.size+offWidth], offset)
-	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], physicalPos)
+	enc.PutUint32(i.mmap[i.size+offWidth:i.size+entryWidth], uint32(physicalPos))
 
-	i.size += uint64(entWidth)
+	i.size += uint64(entryWidth)
 	return nil
 }
 
@@ -71,24 +70,21 @@ func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 		return 0, 0, io.EOF
 	}
 
-	// Calculate number of entries in the index
-	totalEntries := i.size / uint64(entWidth)
+	target := uint32(in)
+	totalEntries := i.size / uint64(entryWidth)
 
 	low := uint64(0)
 	high := totalEntries - 1
 
-	// Binary search on the mmap to find the highest offset <= target
 	for low <= high {
 		mid := low + (high-low)/2
-		physicalPos := mid * uint64(entWidth)
+		pos := mid * uint64(entryWidth)
 
-		// Read the relative offset at the middle position
-		offsetAtMid := enc.Uint32(i.mmap[physicalPos : physicalPos+uint64(offWidth)])
+		offsetAtMid := enc.Uint32(i.mmap[pos : pos+uint64(offWidth)])
 
 		if offsetAtMid == target {
-			// Found exact match
-			actualPhysicalPos := enc.Uint32(i.mmap[physicalPos+uint64(offWidth) : physicalPos+uint64(entWidth)])
-			return offsetAtMid, actualPhysicalPos, nil
+			actualPhysicalPos := enc.Uint32(i.mmap[pos+uint64(offWidth) : pos+uint64(entryWidth)])
+			return offsetAtMid, uint64(actualPhysicalPos), nil
 		}
 
 		if offsetAtMid < target {
@@ -98,12 +94,11 @@ func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 		}
 	}
 
-	// If no exact match, 'high' is the index of the largest offset < target
-	finalPos := high * uint64(entWidth)
+	finalPos := high * uint64(entryWidth)
 	offsetVal := enc.Uint32(i.mmap[finalPos : finalPos+uint64(offWidth)])
-	physicalPosVal := enc.Uint32(i.mmap[finalPos+uint64(offWidth) : finalPos+uint64(entWidth)])
+	physicalPosVal := enc.Uint32(i.mmap[finalPos+uint64(offWidth) : finalPos+uint64(entryWidth)])
 
-	return offsetVal, physicalPosVal, nil
+	return offsetVal, uint64(physicalPosVal), nil
 }
 
 // Close ensures the file is truncated to its actual data size and synced
