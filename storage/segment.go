@@ -29,15 +29,20 @@ type Segment struct {
 	nextOffset  uint64 // next offset to be written
 	maxLogSize  uint64
 	currentSize uint64
-	mu          sync.RWMutex // for write-safely when multiple producers send messages at the same time
+
+	indexIntervalBytes uint64 // min bytes written between two index entries (sparse index)
+	bytesSinceIndex    uint64 // bytes written since the last index entry
+
+	mu sync.RWMutex // for write-safely when multiple producers send messages at the same time
 }
 
 // SegmentConfig holds tunable parameters for a single segment.
 type SegmentConfig struct {
-	MaxLogSize      uint64        // max bytes the .log file can grow before rolling
-	MaxIndexSize    uint64        // max bytes for the memory-mapped index
-	RetentionPeriod time.Duration // how long a segment is kept before eligible for deletion
-	FlushInterval   time.Duration // how often buffered writes are fsynced to disk
+	MaxLogSize         uint64        // max bytes the .log file can grow before rolling
+	MaxIndexSize       uint64        // max bytes for the memory-mapped index
+	IndexIntervalBytes uint64        // min bytes written between two index entries (sparse index)
+	RetentionPeriod    time.Duration // how long a segment is kept before eligible for deletion
+	FlushInterval      time.Duration // how often buffered writes are fsynced to disk
 }
 
 // NewSegment creates and fully initialises a Segment from a config.
@@ -63,10 +68,11 @@ func NewSegment(dir string, baseOffset uint64, c SegmentConfig) (*Segment, error
 	}
 
 	s := &Segment{
-		log:        logFile,
-		index:      idx,
-		baseOffset: baseOffset,
-		maxLogSize: c.MaxLogSize,
+		log:                logFile,
+		index:              idx,
+		baseOffset:         baseOffset,
+		maxLogSize:         c.MaxLogSize,
+		indexIntervalBytes: c.IndexIntervalBytes,
 	}
 
 	// Recovery: read current log size
@@ -76,14 +82,42 @@ func NewSegment(dir string, baseOffset uint64, c SegmentConfig) (*Segment, error
 	}
 	s.currentSize = uint64(fi.Size())
 
-	// Recovery: determine nextOffset from last index entry
-	if lastOff, _, err := idx.Read(-1); err == nil {
-		s.nextOffset = baseOffset + uint64(lastOff) + 1
-	} else {
-		s.nextOffset = baseOffset
+	if err := s.recover(); err != nil {
+		return nil, err
 	}
 
 	return s, nil
+}
+
+// recover determines nextOffset and bytesSinceIndex after (re)opening a
+// segment. Because the index is sparse, its last entry does not necessarily
+// point at the log's actual last record, so we jump to the last indexed
+// position (or the start of the file if the index is empty) and scan
+// forward record-by-record to the true end of the file.
+func (s *Segment) recover() error {
+	var startPos int64
+	if _, lastPos, err := s.index.Read(-1); err == nil {
+		startPos = int64(lastPos)
+	}
+
+	pos := startPos
+	next := s.baseOffset
+	for pos < int64(s.currentSize) {
+		header := make([]byte, offsetWidth+lenWidth)
+		if _, err := s.log.ReadAt(header, pos); err != nil {
+			return fmt.Errorf("corrupt segment at pos %d: %w", pos, err)
+		}
+
+		off := enc.Uint64(header[:offsetWidth])
+		size := enc.Uint32(header[offsetWidth:])
+
+		next = off + 1
+		pos += int64(offsetWidth+lenWidth) + int64(size)
+	}
+
+	s.nextOffset = next
+	s.bytesSinceIndex = uint64(pos - startPos)
+	return nil
 }
 
 func (s *Segment) Append(message []byte) (offset uint64, err error) {
@@ -104,11 +138,20 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	}
 
 	pos := s.currentSize
-	if err := s.index.Write(uint32(curOffset-s.baseOffset), pos); err != nil {
-		return 0, err
+	// Sparse index: always index the first record of a segment (so lookups
+	// starting at baseOffset never scan from position 0), otherwise only
+	// once enough bytes have accumulated since the last indexed entry.
+	if pos == 0 || s.bytesSinceIndex >= s.indexIntervalBytes {
+		if err := s.index.Write(uint32(curOffset-s.baseOffset), pos); err != nil {
+			return 0, err
+		}
+		s.bytesSinceIndex = 0
 	}
+
+	written := uint64(len(header) + len(message))
 	s.nextOffset++
-	s.currentSize += uint64(len(header) + len(message))
+	s.currentSize += written
+	s.bytesSinceIndex += written
 
 	return curOffset, nil
 }

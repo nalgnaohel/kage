@@ -1,5 +1,11 @@
 package broker
 
+import (
+	"time"
+
+	"github.com/nalgnaohel/kage/storage"
+)
+
 type AppendResult struct {
 	Offset int64
 	Error  error
@@ -7,7 +13,7 @@ type AppendResult struct {
 
 type BatchItem struct {
 	Value      []byte
-	resultChan chan AppendResult
+	ResultChan chan AppendResult
 }
 
 // Flusher manages the batching logic for a single partition.
@@ -63,15 +69,15 @@ func (f *Flusher) run() {
 	}
 }
 
-// executeFlush writes the accumulated batch to the storage engine and notifies callers.
-func (f *Flusher) executeFlush(batch []BatchItem) {
+// flushBatch writes the accumulated batch to the storage engine and notifies callers.
+func (f *Flusher) flushBatch(batch []BatchItem) {
 	for _, item := range batch {
 		offset, err := f.log.Append(item.Value)
 
 		// Group-commit: Send result back to the specific producer waiting for this item.
 		// The producer (gRPC handler) will only unblock once this is sent.
 		item.ResultChan <- AppendResult{
-			Offset: offset,
+			Offset: int64(offset),
 			Error:  err,
 		}
 	}

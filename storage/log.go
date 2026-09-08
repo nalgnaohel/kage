@@ -21,18 +21,20 @@ type Log struct {
 }
 
 type Config struct {
-	MaxSegmentSize  uint64
-	MaxIndexSize    uint64
-	RetentionPeriod time.Duration // how long segments are retained before cleanup
-	FlushInterval   time.Duration // how often buffered writes are fsynced to disk
+	MaxSegmentSize     uint64
+	MaxIndexSize       uint64
+	IndexIntervalBytes uint64        // min bytes written between two index entries (sparse index)
+	RetentionPeriod    time.Duration // how long segments are retained before cleanup
+	FlushInterval      time.Duration // how often buffered writes are fsynced to disk
 }
 
 func DefaultConfig() Config {
 	return Config{
-		MaxSegmentSize:  1024 * 1024, // 1 MB
-		MaxIndexSize:    256 * 1024,   // 256 KB
-		RetentionPeriod: 7 * 24 * time.Hour, // 7 days
-		FlushInterval:   500 * time.Millisecond,
+		MaxSegmentSize:     1024 * 1024,        // 1 MB
+		MaxIndexSize:       256 * 1024,         // 256 KB
+		IndexIntervalBytes: 4096,               // 4 KB, matches Kafka's log.index.interval.bytes default
+		RetentionPeriod:    7 * 24 * time.Hour, // 7 days
+		FlushInterval:      500 * time.Millisecond,
 	}
 }
 
@@ -83,10 +85,11 @@ func (l *Log) setup() error {
 // newSegment creates a new segment at the given base offset
 func (l *Log) newSegment(baseOffset uint64) error {
 	s, err := NewSegment(l.Dir, baseOffset, SegmentConfig{
-		MaxLogSize:      l.Config.MaxSegmentSize,
-		MaxIndexSize:    l.Config.MaxIndexSize,
-		RetentionPeriod: l.Config.RetentionPeriod,
-		FlushInterval:   l.Config.FlushInterval,
+		MaxLogSize:         l.Config.MaxSegmentSize,
+		MaxIndexSize:       l.Config.MaxIndexSize,
+		IndexIntervalBytes: l.Config.IndexIntervalBytes,
+		RetentionPeriod:    l.Config.RetentionPeriod,
+		FlushInterval:      l.Config.FlushInterval,
 	})
 	if err != nil {
 		return err

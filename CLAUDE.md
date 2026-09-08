@@ -31,11 +31,6 @@ protoc --proto_path=. \
   api/proto/data.proto api/proto/kadmin.proto
 ```
 
-`broker/flusher.go` currently fails to build: it uses `time.Duration`/`time.NewTicker` and
-`storage.Log` with no `import` block, and references `item.ResultChan` although the `BatchItem`
-struct field is the unexported `resultChan`. Fix the imports and the field name/casing before
-building the `broker` package.
-
 ## Architecture
 
 Three packages, cleanly layered: `storage` (the log engine) → `broker` (per-partition orchestration
@@ -49,25 +44,32 @@ Three-tier design, `Log` → `Segment` → `Index`:
 - **Record format** (`segment.go`): each record on disk is `8-byte big-endian absolute offset` +
   `4-byte big-endian length` + payload. No checksum field currently.
 - **`Segment`** owns one `<baseOffset>.log`/`<baseOffset>.index` file pair (filenames are the base
-  offset zero-padded to 20 digits, e.g. `00000000000000000000.log`). `Append` writes the record then
-  appends an index entry keyed by the *offset relative to the segment's baseOffset* → physical byte
-  position in the log file. `Read` binary-searches the index for the nearest entry, then linear-scans
-  forward through the log from that physical position to the exact offset (index is sparse-capable
-  even though writes today add an entry per record).
+  offset zero-padded to 20 digits, e.g. `00000000000000000000.log`). `Append` writes the record, then
+  adds a **sparse** index entry (offset relative to the segment's baseOffset → physical byte position)
+  only for the segment's first record and thereafter whenever `bytesSinceIndex >= IndexIntervalBytes`
+  (default 4 KB, matching Kafka's `log.index.interval.bytes`). `Read` binary-searches the index for the
+  nearest entry at-or-before the target offset, then linear-scans forward through the log from that
+  physical position until it hits the exact offset — this scan is what makes the index safe to leave
+  sparse.
 - **`Index`** (`index.go`) is a memory-mapped (`gommap`) fixed-width array of `(4-byte relative
   offset, 4-byte physical position)` entries, truncated up front to `MaxIndexSize` and mmap'd; `Close`
-  truncates back down to actual used size before syncing. `Read` binary-searches by relative offset;
-  `Read(-1)` is used as a "give me the last entry" query (relies on unsigned wraparound of the target
-  search value) to recover `nextOffset` on startup.
+  truncates back down to actual used size before syncing. `Read` binary-searches by relative offset,
+  returning the nearest entry ≤ the target when there's no exact match; `Read(-1)` is used as a "give
+  me the last entry" query (relies on unsigned wraparound of the target search value).
 - **`Log`** (`log.go`) owns an ordered slice of segments plus the current `activeSegment`. `Append`
   rolls to a new segment (`newSegment(activeSegment.nextOffset)`) when the write would exceed
   `MaxSegmentSize`. `Read` binary-searches `segments` by `nextOffset` (`sort.Search`) to find which
   segment owns a given absolute offset, then delegates. On `setup()`, all `*.log` files in the
   directory are discovered, their base offsets parsed from the filename, sorted, and every segment is
-  eagerly reopened/recovered (recovery = re-derive `currentSize` from file size and `nextOffset` from
-  the last index entry — no separate WAL/checkpoint).
-- `Config`/`DefaultConfig()` centralizes `MaxSegmentSize`, `MaxIndexSize`, `RetentionPeriod`,
-  `FlushInterval`; retention/flushing are configured but not yet enforced anywhere in this package.
+  eagerly reopened/recovered.
+- **Recovery** (`Segment.recover()`): because the index is sparse, its last entry is *not* necessarily
+  the log's actual last record, so recovery can't just trust `Index.Read(-1)`. Instead it jumps to the
+  last indexed position (or byte 0 if the index is empty) and scans forward record-by-record to the
+  true end of the file, deriving both `nextOffset` and `bytesSinceIndex` from that scan. No separate
+  WAL/checkpoint.
+- `Config`/`DefaultConfig()` centralizes `MaxSegmentSize`, `MaxIndexSize`, `IndexIntervalBytes`,
+  `RetentionPeriod`, `FlushInterval`; retention/flushing are configured but not yet enforced anywhere
+  in this package.
 
 ### `broker`: per-partition orchestration above the log engine
 
@@ -81,8 +83,7 @@ Three-tier design, `Log` → `Segment` → `Index`:
   and get back a `chan AppendResult` to block on; a background goroutine batches incoming
   `BatchItem`s and flushes to `storage.Log.Append` either when `batchSize` is reached or on a
   `lingerTime` ticker (classic group-commit). Each flushed item's result is delivered individually
-  down its own channel so the many producers waiting on one batch each unblock independently. (See
-  the build-breaking bug noted under Commands.)
+  down its own channel so the many producers waiting on one batch each unblock independently.
 
 ### `api`: gRPC surface
 
