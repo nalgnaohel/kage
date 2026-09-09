@@ -22,15 +22,15 @@ go test ./test/storage/... -run TestName -v   # run a single test
 go test ./test/storage/... -update     # regenerate golden fixtures after an intentional behavior change
 ```
 
-Regenerating gRPC code from `.proto` sources (inferred from the existing generated-file layout —
-`api/rpc/api/proto/*.pb.go` mirrors `api/proto/*.proto` under the `--go_out` dir, i.e.
-`paths=source_relative`):
+Regenerating gRPC code from `.proto` sources (`api/rpc/api/proto/<plane>/*.pb.go` mirrors
+`api/proto/<plane>/*.proto` under the `--go_out` dir, i.e. `paths=source_relative` — note the doubled
+`api/proto` path segment, a side effect of `--go_out=api/rpc` with paths already rooted at `api/proto`):
 
 ```
 protoc --proto_path=. \
   --go_out=api/rpc --go_opt=paths=source_relative \
   --go-grpc_out=api/rpc --go-grpc_opt=paths=source_relative \
-  api/proto/data.proto api/proto/kadmin.proto
+  api/proto/data/data.proto api/proto/kadmin/kadmin.proto
 ```
 
 ## Architecture
@@ -101,20 +101,19 @@ Three-tier design, `Log` → `Segment` → `Index`:
 
 ### `api`: gRPC surface
 
-Two `.proto` files under `api/proto/`, split by plane per the project's control/data-plane split:
+Two `.proto` files, each in its own subdirectory under `api/proto/` so they generate into distinct Go
+packages, split by plane per the project's control/data-plane split:
 
-- **`data.proto`** — data plane, client-facing: `GetMetadata` (partition→leader discovery, meant to
-  be called once and cached, not on every message), `Produce`, `Fetch` (long-poll style via
-  `max_wait_ms`/`min_bytes`), `CommitOffset`/`GetOffset`, `ListOffsets`.
-- **`kadmin.proto`** — control/admin plane: `CreateTopic`/`DeleteTopic`/`ListTopics`/`DescribeTopic`,
-  `GetClusterInfo`. `PartitionInfo`/`PartitionMetadata` already carry `leader`/`replicas`/`isr` fields
-  anticipating the Raft + ISR phases even though nothing populates them yet.
-
-Generated code lands in `api/rpc/api/proto/{data,kadmin}.{pb,grpc.pb}.go` — note the doubled
-`api/proto` path segment, a side effect of `--go_out=api/rpc --go_opt=paths=source_relative`. Both
-proto files currently declare `option go_package = "kage/rpc/kadmin"`, so both generate into the same
-Go package `kadmin` (import path `github.com/nalgnaohel/kage/api/rpc/api/proto`) — worth splitting
-into distinct packages before the data-plane and admin-plane servers grow much further.
+- **`data/data.proto`** (`option go_package = "kage/rpc/data"`) — data plane, client-facing:
+  `GetMetadata` (partition→leader discovery, meant to be called once and cached, not on every
+  message), `Produce`, `Fetch` (long-poll style via `max_wait_ms`/`min_bytes`), `CommitOffset`/
+  `GetOffset`, `ListOffsets`. Generated code: `api/rpc/api/proto/data/data.{pb,grpc.pb}.go`, package
+  `data` (import path `github.com/nalgnaohel/kage/api/rpc/api/proto/data`).
+- **`kadmin/kadmin.proto`** (`option go_package = "kage/rpc/kadmin"`) — control/admin plane:
+  `CreateTopic`/`DeleteTopic`/`ListTopics`/`DescribeTopic`, `GetClusterInfo`. `PartitionInfo`/
+  `PartitionMetadata` already carry `leader`/`replicas`/`isr` fields anticipating the Raft + ISR phases
+  even though nothing populates them yet. Generated code: `api/rpc/api/proto/kadmin/kadmin.{pb,grpc.pb}.go`,
+  package `kadmin` (import path `github.com/nalgnaohel/kage/api/rpc/api/proto/kadmin`).
 
 ## Project phase (context for design decisions)
 

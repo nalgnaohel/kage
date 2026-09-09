@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package kage.data;
 
-option go_package = "kage/rpc/kadmin";
+option go_package = "kage/rpc/data";
 
 service KageDataService {
   // Discovery: Used by clients to locate partition leaders
