@@ -1,0 +1,6 @@
+{
+  "PayloadAtZero": "a",
+  "PayloadAtOne": "b",
+  "PayloadAtTwo": "c",
+  "NextAppendOffset": 3
+}

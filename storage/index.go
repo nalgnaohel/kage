@@ -52,7 +52,7 @@ func (i *Index) Write(offset uint32, physicalPos uint64) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	if uint64(len(i.mmap)) < i.size+entryWidth {
+	if uint64(len(i.mmap)) < i.size + entryWidth {
 		return io.EOF
 	}
 	enc.PutUint32(i.mmap[i.size:i.size+offWidth], offset)
@@ -71,14 +71,17 @@ func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 	}
 
 	target := uint32(in)
-	totalEntries := i.size / uint64(entryWidth)
+	totalEntries := int64(i.size / uint64(entryWidth))
 
-	low := uint64(0)
+	// low/high are signed so that high can go below zero when the target
+	// is smaller than every stored offset, instead of wrapping around as
+	// a huge uint64 and driving the mmap access out of bounds.
+	low := int64(0)
 	high := totalEntries - 1
 
 	for low <= high {
 		mid := low + (high-low)/2
-		pos := mid * uint64(entryWidth)
+		pos := uint64(mid) * uint64(entryWidth)
 
 		offsetAtMid := enc.Uint32(i.mmap[pos : pos+uint64(offWidth)])
 
@@ -94,7 +97,13 @@ func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 		}
 	}
 
-	finalPos := high * uint64(entryWidth)
+	if high < 0 {
+		// target is smaller than every stored offset: there is no entry
+		// at-or-before it.
+		return 0, 0, io.EOF
+	}
+
+	finalPos := uint64(high) * uint64(entryWidth)
 	offsetVal := enc.Uint32(i.mmap[finalPos : finalPos+uint64(offWidth)])
 	physicalPosVal := enc.Uint32(i.mmap[finalPos+uint64(offWidth) : finalPos+uint64(entryWidth)])
 
