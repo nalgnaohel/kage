@@ -117,6 +117,20 @@ func (l *Log) Append(data []byte) (int, error) {
 	return int(off), err
 }
 
+// Close closes every segment's underlying files. The log must not be
+// used after Close.
+func (l *Log) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, s := range l.segments {
+		if err := s.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Read logic at the Log level
 func (l *Log) Read(offset uint64) ([]byte, error) {
 	l.mu.RLock()

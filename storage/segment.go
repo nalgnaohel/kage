@@ -156,6 +156,21 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	return curOffset, nil
 }
 
+// Close flushes the index down to its actual used size and closes both
+// the log and index files. The segment must not be used after Close.
+func (s *Segment) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.log.Sync(); err != nil {
+		return err
+	}
+	if err := s.index.Close(); err != nil {
+		return err
+	}
+	return s.log.Close()
+}
+
 func (s *Segment) Read(offset uint64) (message []byte, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

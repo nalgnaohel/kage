@@ -183,6 +183,48 @@ func TestSegmentRecover_ScansPastLastIndexEntry(t *testing.T) {
 	}{off, string(got), errString(readErr)})
 }
 
+func TestSegmentClose_ThenReopen_PreservesDataAndNextOffset(t *testing.T) {
+	// input: append 4 records with IndexIntervalBytes set very high (so
+	// only the first record ever gets an index entry), Close the
+	// segment, then NewSegment again on the same directory
+	// golden: the offset of the next Append after reopening (proves
+	// nextOffset survived a real close/reopen cycle), and the payload of
+	// a record that was never individually indexed (proves Close()
+	// truncated the index file down to its real used size - without
+	// that, a reopened Index would misread the file's MaxIndexSize
+	// padding as if it were real entries)
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1<<20, 4096, 1<<30))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := seg.Append([]byte(fmt.Sprintf("a%d", i))); err != nil {
+			t.Fatalf("Append #%d: %v", i, err)
+		}
+	}
+	if err := seg.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	reopened, err := storage.NewSegment(dir, 0, segCfg(1<<20, 4096, 1<<30))
+	if err != nil {
+		t.Fatalf("NewSegment (reopen): %v", err)
+	}
+
+	off, err := reopened.Append([]byte("a4"))
+	if err != nil {
+		t.Fatalf("Append after reopen: %v", err)
+	}
+	got, readErr := reopened.Read(2)
+
+	assertGolden(t, "segment", struct {
+		NextAppendOffset      uint64
+		RecoveredPayloadAtTwo string
+		ReadErr               string
+	}{off, string(got), errString(readErr)})
+}
+
 func TestSegmentRecover_EmptyLogFile_StartsAtBaseOffset(t *testing.T) {
 	// input: an empty (zero-byte) pre-existing .log/.index pair at
 	// baseOffset 7 - nothing to recover

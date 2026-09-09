@@ -139,6 +139,49 @@ func TestLogRead_OutOfRange_ReturnsError(t *testing.T) {
 	assertGolden(t, "log", struct{ Err string }{errString(readErr)})
 }
 
+func TestLogClose_ThenReopen_PreservesDataAcrossSegments(t *testing.T) {
+	// input: force a rollover (MaxSegmentSize = 32) across 5 Appends so
+	// the directory ends up with multiple segment files, Close the log,
+	// then NewLog again on the same directory
+	// golden: the payload of an offset from the pre-rollover (no longer
+	// active) segment, and the offset of the next Append after
+	// reopening - proves setup() picked the highest-baseOffset segment
+	// as active and recovered its nextOffset correctly after a real
+	// close/reopen cycle
+	dir := t.TempDir()
+	log, err := storage.NewLog(dir, logCfg(32, 4096, 4096))
+	if err != nil {
+		t.Fatalf("NewLog: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := log.Append([]byte(fmt.Sprintf("rec%d", i))); err != nil {
+			t.Fatalf("Append #%d: %v", i, err)
+		}
+	}
+	if err := log.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	reopened, err := storage.NewLog(dir, logCfg(32, 4096, 4096))
+	if err != nil {
+		t.Fatalf("NewLog (reopen): %v", err)
+	}
+
+	got, err := reopened.Read(0)
+	if err != nil {
+		t.Fatalf("Read(0): %v", err)
+	}
+	off, err := reopened.Append([]byte("rec5"))
+	if err != nil {
+		t.Fatalf("Append after reopen: %v", err)
+	}
+
+	assertGolden(t, "log", struct {
+		PayloadAtZero    string
+		NextAppendOffset int
+	}{string(got), off})
+}
+
 func TestNewLog_DiscoversPreexistingSegmentsInSortedOrder(t *testing.T) {
 	// input: a directory already containing two segments left behind by a
 	// previous run - baseOffset 0 with records at offsets 0,1, and

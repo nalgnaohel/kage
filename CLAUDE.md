@@ -16,8 +16,10 @@ Standard Go tooling, no Makefile/CI config in the repo:
 ```
 go build ./...     # build everything
 go vet ./...        # static checks
-go test ./...        # run tests (none exist yet)
-go test ./storage -run TestName -v   # run a single test once tests are added
+go test ./...        # run all tests
+go test ./test/storage/... -v          # storage package tests (Index/Segment/Log)
+go test ./test/storage/... -run TestName -v   # run a single test
+go test ./test/storage/... -update     # regenerate golden fixtures after an intentional behavior change
 ```
 
 Regenerating gRPC code from `.proto` sources (inferred from the existing generated-file layout —
@@ -54,8 +56,11 @@ Three-tier design, `Log` → `Segment` → `Index`:
 - **`Index`** (`index.go`) is a memory-mapped (`gommap`) fixed-width array of `(4-byte relative
   offset, 4-byte physical position)` entries, truncated up front to `MaxIndexSize` and mmap'd; `Close`
   truncates back down to actual used size before syncing. `Read` binary-searches by relative offset,
-  returning the nearest entry ≤ the target when there's no exact match; `Read(-1)` is used as a "give
-  me the last entry" query (relies on unsigned wraparound of the target search value).
+  returning the nearest entry ≤ the target when there's no exact match, or `io.EOF` if the target is
+  smaller than every stored entry; `Read(-1)` is used as a "give me the last entry" query (relies on
+  unsigned wraparound of the target search value). The binary search bounds (`low`/`high`) are signed
+  (`int64`) specifically so `high` can go negative for that below-smallest-entry case instead of
+  underflowing as a `uint64` and driving an out-of-range mmap access.
 - **`Log`** (`log.go`) owns an ordered slice of segments plus the current `activeSegment`. `Append`
   rolls to a new segment (`newSegment(activeSegment.nextOffset)`) when the write would exceed
   `MaxSegmentSize`. `Read` binary-searches `segments` by `nextOffset` (`sort.Search`) to find which
@@ -70,6 +75,15 @@ Three-tier design, `Log` → `Segment` → `Index`:
 - `Config`/`DefaultConfig()` centralizes `MaxSegmentSize`, `MaxIndexSize`, `IndexIntervalBytes`,
   `RetentionPeriod`, `FlushInterval`; retention/flushing are configured but not yet enforced anywhere
   in this package.
+- **Tests**: `test/storage/` is an external (`storage_test`) test suite covering `Index`/`Segment`/`Log`
+  — append/read round trips, sparse-index nearest-lower-entry lookups, the linear-scan fallback for
+  offsets that fall between sparse index entries, segment rollover, and crash recovery. Recovery cases
+  can't close and reopen a live `Segment`/`Log` (neither type exposes a `Close()`, and `Index`'s own
+  `Close()`-driven truncation-to-used-size is required for a reopened index to compute its size
+  correctly), so those tests instead hand-construct raw `.log`/`.index` files on disk to simulate data
+  left behind by a crash. Expected values are stored as JSON `.golden` files under
+  `test/storage/testdata/<index|segment|log>/`, one per test, rather than as inline assertions;
+  regenerate them with `go test ./test/storage/... -update` after an intentional behavior change.
 
 ### `broker`: per-partition orchestration above the log engine
 
