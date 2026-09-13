@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Kage — a Kafka-inspired distributed message queue, built **KRaft-style**: Raft owns metadata/control
 plane, ISR (in-sync replicas) owns the data plane, deliberately kept separate so consensus never sits
 on the hot write path. The project is being built in three phases (see the "Project phase" section
-below); the repo today is early/mid Phase 1 — the storage engine, not yet wired to a running server.
+below); the repo today is early/mid Phase 1 — the storage engine plus a running single-broker `kadmin`
+gRPC control-plane server (topic create/list/describe/delete, cluster info). The data plane
+(`data.proto`'s Produce/Fetch) is still unwired scaffolding.
 
 ## Commands
 
@@ -20,6 +22,8 @@ go test ./...        # run all tests
 go test ./test/storage/... -v          # storage package tests (Index/Segment/Log)
 go test ./test/storage/... -run TestName -v   # run a single test
 go test ./test/storage/... -update     # regenerate golden fixtures after an intentional behavior change
+go test ./test/broker/... -v           # broker package tests (topic/cluster management)
+go test ./test/broker/... -update      # regenerate golden fixtures after an intentional behavior change
 ```
 
 Regenerating gRPC code from `.proto` sources (`api/rpc/api/proto/<plane>/*.pb.go` mirrors
@@ -36,8 +40,10 @@ protoc --proto_path=. \
 ## Architecture
 
 Three packages, cleanly layered: `storage` (the log engine) → `broker` (per-partition orchestration
-on top of the log engine) → `api` (gRPC surface, hand-written `.proto` + generated code). `main.go`
-is still the unmodified GoLand template — nothing is wired to a running server yet.
+plus topic/cluster bookkeeping on top of the log engine) → `api` (gRPC surface: generated code under
+`api/rpc/...` plus a hand-written server implementation in `api/kadmin`). `main.go` wires
+`broker.Registry` to a running `kadmin` gRPC server — control/admin plane only; the data plane isn't
+wired to anything yet.
 
 ### `storage`: the append-only log engine
 
@@ -89,15 +95,30 @@ Three-tier design, `Log` → `Segment` → `Index`:
 
 - **`Registry`** (`registry.go`) maps `topic -> partition -> *storage.Log`. Partition directories on
   disk are named `<topic>-<partition>` (split on the *last* `-`, so topic names may contain dashes).
-  `Startup()` eager-loads every existing partition directory under `baseDir`; `CreateLog` creates a
-  new one. This is the layer a future gRPC server looks up logs through — there's no partition
-  assignment/leader logic here, it's local-disk bookkeeping only (control-plane concerns like leader
-  election belong to the not-yet-built Raft metadata layer).
+  `Startup()` eager-loads every existing partition directory under `baseDir`; `CreateLog` creates the
+  partition directory and a new `Log` in it. This is the layer the `kadmin` gRPC server (and, later, a
+  data-plane server) look up logs through — there's no partition assignment/leader logic here, it's
+  local-disk bookkeeping only (control-plane concerns like leader election belong to the not-yet-built
+  Raft metadata layer).
+- **`TopicConfig`/topic management** (`topic.go`) builds topic-level operations on top of `Registry`:
+  `CreateTopic(topic, numPartitions, replicationFactor)` creates one `Log` per partition via
+  `CreateLog` and records the config in `r.topics`; `ListTopics`/`DescribeTopic` read topic/partition
+  *existence* from `r.logs`, not `r.topics`, so they stay correct across a restart — `r.topics` isn't
+  persisted anywhere yet, so `Startup()` rebuilds a best-effort entry (`ReplicationFactor` defaults to
+  `1`) for any topic missing one. `DeleteTopic` closes and permanently removes every partition's files
+  (synchronous, irreversible — fine at single-broker scale).
+- **`BrokerInfo`/`GetClusterInfo`** (`cluster.go`) reports this broker's own identity
+  (`clusterID`/`brokerID`/`host`/`port`, set once at `NewRegistry` construction) as the cluster's only
+  member. Real multi-broker membership is Raft/KRaft controller work (Phase 2, not started).
 - **`Flusher`** (`flusher.go`) is a per-partition async batching writer: producers call `Push(value)`
   and get back a `chan AppendResult` to block on; a background goroutine batches incoming
   `BatchItem`s and flushes to `storage.Log.Append` either when `batchSize` is reached or on a
   `lingerTime` ticker (classic group-commit). Each flushed item's result is delivered individually
-  down its own channel so the many producers waiting on one batch each unblock independently.
+  down its own channel so the many producers waiting on one batch each unblock independently. Not
+  wired to any server yet — the data plane has no `GetFlusher`/lookup path built for it.
+- **Tests**: `test/broker/` mirrors `test/storage/`'s convention — an external (`broker_test`)
+  package, results asserted via `.golden` JSON files under `test/broker/testdata/<registry|topic|
+  cluster>/`, regenerate with `go test ./test/broker/... -update`.
 
 ### `api`: gRPC surface
 
@@ -114,6 +135,15 @@ packages, split by plane per the project's control/data-plane split:
   `PartitionMetadata` already carry `leader`/`replicas`/`isr` fields anticipating the Raft + ISR phases
   even though nothing populates them yet. Generated code: `api/rpc/api/proto/kadmin/kadmin.{pb,grpc.pb}.go`,
   package `kadmin` (import path `github.com/nalgnaohel/kage/api/rpc/api/proto/kadmin`).
+- **`api/kadmin`** (hand-written, package `kadmin` — a different import path than the generated
+  `.../api/rpc/api/proto/kadmin` package, which callers alias as `pb`) implements
+  `kadmin.KafkaAdminServer` by wrapping a `*broker.Registry`: each RPC is a thin translation to the
+  matching `Registry`/topic-management method. `CreateTopic`/`DeleteTopic` report domain errors via
+  `success=false, message=...` (the proto has no error-code field); `DescribeTopic` returns a gRPC
+  `NotFound` status for an unknown topic and fills every partition's `leader`/`replicas`/`isr` with
+  this single broker's own ID (placeholder until Raft/ISR exist). Registered in `main.go` (flags:
+  `-data-dir`, `-grpc-addr`, `-host`, `-port`, `-broker-id`, `-cluster-id`) — the only service
+  currently wired to a running server; `data.proto`'s service has no implementation yet.
 
 ## Project phase (context for design decisions)
 
@@ -122,5 +152,8 @@ approach: metadata (topic config, partition→leader assignment, broker membersh
 through a `hashicorp/raft` controller quorum (Phase 2, not started), while message data is meant to
 replicate leader→follower via ISR with a high-watermark, deliberately kept off the consensus hot path
 (Phase 3, not started). Message data must never be routed through Raft. Today's code is Phase 1: a
-working single-broker storage engine, plus the `broker` package's registry/flusher scaffolding for
-wiring that engine up to the `data.proto` gRPC service.
+working single-broker storage engine, a running `kadmin` gRPC control-plane server (topic/cluster
+management), and the `broker` package's `Flusher` scaffolding for the data plane — not wired to any
+server yet. `docs/zero-copy-plan.md` is a written-but-unstarted design for that data plane: it plans
+to bypass gRPC entirely for `Produce`/`Fetch` in favor of a raw TCP path, so `Fetch` can use kernel
+`sendfile(2)` (gRPC/HTTP2 framing and TLS both rule that out).
