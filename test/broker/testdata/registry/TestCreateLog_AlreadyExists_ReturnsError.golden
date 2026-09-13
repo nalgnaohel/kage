@@ -1,0 +1,4 @@
+{
+  "FirstErr": "",
+  "SecondErr": "partition 0 for topic orders already existed"
+}

@@ -1,0 +1,10 @@
+{
+  "ClusterID": "my-cluster",
+  "Brokers": [
+    {
+      "BrokerID": 7,
+      "Host": "example.com",
+      "Port": 9093
+    }
+  ]
+}

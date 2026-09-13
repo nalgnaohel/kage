@@ -15,17 +15,32 @@ type Registry struct {
 	mu      sync.RWMutex
 	baseDir string
 	config  storage.LogConfig
+	topics  map[string]TopicConfig
 
 	// logs maps: Topic Name -> Partition ID -> Log Object
 	// Example: logs["orders"][0] -> *storage.Log
 	logs map[string]map[int32]*storage.Log
+
+	// This broker's own identity. Immutable after construction — no lock
+	// needed to read these. Single-broker Phase 1 only; real multi-broker
+	// cluster membership is Raft/KRaft controller work (Phase 2, not
+	// started), so GetClusterInfo always reports exactly this one broker.
+	clusterID string
+	brokerID  int32
+	host      string
+	port      int32
 }
 
-func NewRegistry(baseDir string, cfg storage.LogConfig) *Registry {
+func NewRegistry(baseDir string, cfg storage.LogConfig, clusterID string, brokerID int32, host string, port int32) *Registry {
 	return &Registry{
-		baseDir: baseDir,
-		config:  cfg,
-		logs:    make(map[string]map[int32]*storage.Log),
+		baseDir:   baseDir,
+		config:    cfg,
+		logs:      make(map[string]map[int32]*storage.Log),
+		topics:    make(map[string]TopicConfig),
+		clusterID: clusterID,
+		brokerID:  brokerID,
+		host:      host,
+		port:      port,
 	}
 }
 
@@ -80,6 +95,22 @@ func (r *Registry) Startup() error {
 		r.logs[topic][int32(partition)] = l
 	}
 
+	// Rebuild topic-level config from what was actually discovered on disk.
+	// ReplicationFactor isn't persisted anywhere yet (no metadata store until
+	// Raft lands in Phase 2), so it defaults to 1 here — a topic created via
+	// CreateTopic in the same process lifetime keeps its real value since
+	// this only fills in topics still missing from r.topics.
+	for topic, pMap := range r.logs {
+		if _, exists := r.topics[topic]; exists {
+			continue
+		}
+		r.topics[topic] = TopicConfig{
+			Name:              topic,
+			NumPartitions:     int32(len(pMap)),
+			ReplicationFactor: 1,
+		}
+	}
+
 	return nil
 }
 
@@ -103,15 +134,19 @@ func (r *Registry) CreateLog(topic string, partition int32) (*storage.Log, error
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Check if the partition is already existed
-	if partitionMap, existed := r.logs[topic]; existed {
-		return partitionMap[partition], fmt.Errorf("partition %d for topic %s already existed", partition, topic)
+	if pMap, ok := r.logs[topic]; ok {
+		if l, ok := pMap[partition]; ok {
+			return l, fmt.Errorf("partition %d for topic %s already existed", partition, topic)
+		}
 	}
 
 	// Create the partition directory. The directory name should be
 	// of the form data/topic-name-partitionID
 	dirName := fmt.Sprintf("%s-%d", topic, partition)
 	partitionPath := filepath.Join(r.baseDir, dirName)
+	if err := os.MkdirAll(partitionPath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create partition directory: %w", err)
+	}
 
 	// Create a new Log
 	newLog, err := storage.NewLog(partitionPath, r.config)
