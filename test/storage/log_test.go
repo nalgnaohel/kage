@@ -8,8 +8,8 @@ import (
 	"github.com/nalgnaohel/kage/storage"
 )
 
-func logCfg(maxSegmentSize, maxIndexSize, indexIntervalBytes uint64) storage.Config {
-	return storage.Config{
+func logCfg(maxSegmentSize, maxIndexSize, indexIntervalBytes uint64) storage.LogConfig {
+	return storage.LogConfig{
 		MaxSegmentSize:     maxSegmentSize,
 		MaxIndexSize:       maxIndexSize,
 		IndexIntervalBytes: indexIntervalBytes,

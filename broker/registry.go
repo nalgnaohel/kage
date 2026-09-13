@@ -14,14 +14,14 @@ import (
 type Registry struct {
 	mu      sync.RWMutex
 	baseDir string
-	config  storage.Config
+	config  storage.LogConfig
 
 	// logs maps: Topic Name -> Partition ID -> Log Object
 	// Example: logs["orders"][0] -> *storage.Log
 	logs map[string]map[int32]*storage.Log
 }
 
-func NewRegistry(baseDir string, cfg storage.Config) *Registry {
+func NewRegistry(baseDir string, cfg storage.LogConfig) *Registry {
 	return &Registry{
 		baseDir: baseDir,
 		config:  cfg,

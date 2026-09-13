@@ -72,7 +72,7 @@ Three-tier design, `Log` → `Segment` → `Index`:
   last indexed position (or byte 0 if the index is empty) and scans forward record-by-record to the
   true end of the file, deriving both `nextOffset` and `bytesSinceIndex` from that scan. No separate
   WAL/checkpoint.
-- `Config`/`DefaultConfig()` centralizes `MaxSegmentSize`, `MaxIndexSize`, `IndexIntervalBytes`,
+- `LogConfig`/`DefaultLogConfig()` centralizes `MaxSegmentSize`, `MaxIndexSize`, `IndexIntervalBytes`,
   `RetentionPeriod`, `FlushInterval`; retention/flushing are configured but not yet enforced anywhere
   in this package.
 - **Tests**: `test/storage/` is an external (`storage_test`) test suite covering `Index`/`Segment`/`Log`

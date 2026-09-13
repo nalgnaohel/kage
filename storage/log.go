@@ -14,13 +14,13 @@ type Log struct {
 	mu sync.RWMutex
 
 	Dir    string
-	Config Config
+	Config LogConfig
 
 	activeSegment *Segment
 	segments      []*Segment
 }
 
-type Config struct {
+type LogConfig struct {
 	MaxSegmentSize     uint64
 	MaxIndexSize       uint64
 	IndexIntervalBytes uint64        // min bytes written between two index entries (sparse index)
@@ -28,8 +28,8 @@ type Config struct {
 	FlushInterval      time.Duration // how often buffered writes are fsynced to disk
 }
 
-func DefaultConfig() Config {
-	return Config{
+func DefaultLogConfig() LogConfig {
+	return LogConfig{
 		MaxSegmentSize:     1024 * 1024,        // 1 MB
 		MaxIndexSize:       256 * 1024,         // 256 KB
 		IndexIntervalBytes: 4096,               // 4 KB, matches Kafka's log.index.interval.bytes default
@@ -38,7 +38,7 @@ func DefaultConfig() Config {
 	}
 }
 
-func NewLog(dir string, c Config) (*Log, error) {
+func NewLog(dir string, c LogConfig) (*Log, error) {
 	l := &Log{
 		Dir:    dir,
 		Config: c,
