@@ -28,7 +28,6 @@ func (r *Registry) CreateTopic(topic string, numPartitions int32, replicationFac
 		return fmt.Errorf("replication factor must be greater than 0")
 	}
 
-	// Create the partitions
 	for i := int32(0); i < numPartitions; i++ {
 		_, err := r.CreateLog(topic, i)
 		if err != nil {
@@ -47,9 +46,8 @@ func (r *Registry) CreateTopic(topic string, numPartitions int32, replicationFac
 	return nil
 }
 
-// ListTopics returns the names of every topic that currently has at least
-// one partition on disk (derived from r.logs, which Startup() rebuilds from
-// disk on restart — unlike r.topics, this stays correct across restarts).
+// Derived from r.logs, not r.topics: survives restart since Startup()
+// rebuilds r.logs from disk.
 func (r *Registry) ListTopics() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -62,8 +60,6 @@ func (r *Registry) ListTopics() []string {
 	return topics
 }
 
-// DescribeTopic returns the topic's config and sorted partition IDs.
-// found is false only when the topic has no partitions in r.logs at all —
 // r.topics is always populated for anything in r.logs (Startup()/CreateTopic
 // both guarantee it), so no fallback construction is needed here.
 func (r *Registry) DescribeTopic(topic string) (cfg TopicConfig, partitionIDs []int32, found bool) {
@@ -84,11 +80,8 @@ func (r *Registry) DescribeTopic(topic string) (cfg TopicConfig, partitionIDs []
 	return r.topics[topic], partitionIDs, true
 }
 
-// DeleteTopic closes and permanently removes every partition's .log/.index
-// files for topic, then drops it from the registry. This is synchronous and
-// irreversible — fine at single-broker scale (no background cleanup queue
-// needed yet); revisit if/when deletes need to be async (e.g. large topics,
-// or once replication means a delete has to fan out to other brokers).
+// Synchronous and irreversible — fine at single-broker scale; revisit if
+// deletes ever need to be async (large topics, or fan-out once replicated).
 func (r *Registry) DeleteTopic(topic string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

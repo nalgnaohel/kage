@@ -16,8 +16,6 @@ type BatchItem struct {
 	ResultChan chan AppendResult
 }
 
-// Flusher manages the batching logic for a single partition.
-// It ensures that data is written in batches to optimize Disk I/O.
 type Flusher struct {
 	log           *storage.Log
 	incomingQueue chan BatchItem
@@ -26,22 +24,19 @@ type Flusher struct {
 	stopChan      chan struct{}
 }
 
-// NewFlusher initializes and starts a background flusher for the given log.
 func NewFlusher(l *storage.Log, batchSize int, linger time.Duration) *Flusher {
 	f := &Flusher{
 		log:           l,
-		incomingQueue: make(chan BatchItem, 4096), // Buffer to handle request spikes
+		incomingQueue: make(chan BatchItem, 4096),
 		batchSize:     batchSize,
 		lingerTime:    linger,
 		stopChan:      make(chan struct{}),
 	}
 
-	// Start the background worker goroutine
 	go f.run()
 	return f
 }
 
-// run is the main worker loop. It stays active until stopChan is closed.
 func (f *Flusher) run() {
 	var currentBatch []BatchItem
 
@@ -50,32 +45,30 @@ func (f *Flusher) run() {
 	for {
 		select {
 		case <-f.stopChan:
-			// Flush any remaining items before exiting
 			f.flushBatch(currentBatch)
 			return
 		case item := <-f.incomingQueue:
 			currentBatch = append(currentBatch, item)
 			if len(currentBatch) >= f.batchSize {
 				f.flushBatch(currentBatch)
-				currentBatch = nil         // Reset batch after flushing
-				ticker.Reset(f.lingerTime) // Reset timer after flushing
+				currentBatch = nil
+				ticker.Reset(f.lingerTime)
 			}
 		case <-ticker.C:
 			if len(currentBatch) > 0 {
 				f.flushBatch(currentBatch)
-				currentBatch = nil // Reset batch after flushing
+				currentBatch = nil
 			}
 		}
 	}
 }
 
-// flushBatch writes the accumulated batch to the storage engine and notifies callers.
 func (f *Flusher) flushBatch(batch []BatchItem) {
 	for _, item := range batch {
 		offset, err := f.log.Append(item.Value)
 
-		// Group-commit: Send result back to the specific producer waiting for this item.
-		// The producer (gRPC handler) will only unblock once this is sent.
+		// Group-commit: each waiter gets its own channel so producers sharing
+		// a batch unblock independently instead of all waiting on one signal.
 		item.ResultChan <- AppendResult{
 			Offset: int64(offset),
 			Error:  err,
@@ -84,8 +77,6 @@ func (f *Flusher) flushBatch(batch []BatchItem) {
 	// TODO: Sync for safety
 }
 
-// Push adds a new record to the flusher's queue.
-// It returns a result channel that the caller must listen to.
 func (f *Flusher) Push(value []byte) chan AppendResult {
 	resChan := make(chan AppendResult, 1)
 	f.incomingQueue <- BatchItem{
@@ -95,7 +86,6 @@ func (f *Flusher) Push(value []byte) chan AppendResult {
 	return resChan
 }
 
-// Close signals the flusher to shut down gracefully.
 func (f *Flusher) Close() {
 	close(f.stopChan)
 }

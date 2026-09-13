@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	offWidth   = 4                   // 4 bytes for relative offset
-	posWidth   = 4                   // 4 bytes for physical position
-	entryWidth = offWidth + posWidth // total entry size (8 bytes)
+	offWidth   = 4
+	posWidth   = 4
+	entryWidth = offWidth + posWidth
 )
 
 type Index struct {
@@ -21,7 +21,6 @@ type Index struct {
 	mu   sync.Mutex
 }
 
-// NewIndex creates a new index file and memory-maps it
 func NewIndex(f *os.File, maxIndexSize uint64) (*Index, error) {
 	idx := &Index{
 		file: f,
@@ -32,12 +31,11 @@ func NewIndex(f *os.File, maxIndexSize uint64) (*Index, error) {
 	}
 	idx.size = uint64(fi.Size())
 
-	// Truncate the file to the maximum size before mapping
+	// mmap needs a fixed-size file, so grow it to the cap up front
 	if err := f.Truncate(int64(maxIndexSize)); err != nil {
 		return nil, err
 	}
 
-	// Map the file into memory
 	if idx.mmap, err = gommap.Map(
 		idx.file.Fd(),
 		gommap.PROT_READ|gommap.PROT_WRITE,
@@ -98,8 +96,7 @@ func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 	}
 
 	if high < 0 {
-		// target is smaller than every stored offset: there is no entry
-		// at-or-before it.
+		// target is smaller than every stored offset: no entry at-or-before it
 		return 0, 0, io.EOF
 	}
 
@@ -110,20 +107,18 @@ func (i *Index) Read(in int64) (offset uint32, physicalPos uint64, err error) {
 	return offsetVal, uint64(physicalPosVal), nil
 }
 
-// Close ensures the file is truncated to its actual data size and synced
+// Close must be the last call on an Index — it is not usable afterward.
 func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Sync memory changes to disk
 	if err := i.mmap.Sync(gommap.MS_SYNC); err != nil {
 		return err
 	}
-	// Flush file buffers
 	if err := i.file.Sync(); err != nil {
 		return err
 	}
-	// Truncate file to remove unused space allocated for mmap
+	// drop the padding added up front for the mmap
 	if err := i.file.Truncate(int64(i.size)); err != nil {
 		return err
 	}

@@ -9,45 +9,37 @@ import (
 	"time"
 )
 
-// Segment's header's constants
 const (
-	lenWidth    = 4 // 4 bytes for Message Size
-	offsetWidth = 8 // 8 bytes for Offset
+	lenWidth    = 4
+	offsetWidth = 8
 )
 
-// Use BigEndian to store the header
-// BigEndian is used to make sure the data retrieved from the
-// binary is the same regardless of the platform's endianness.
-// This ensures that the log can be read correctly on any OS (macOS, Linux or Window).
+// BigEndian so the log reads back the same regardless of platform endianness.
 var enc = binary.BigEndian
 
-// Segment can be seen as an unit of log storage (log contains multiple segments)
 type Segment struct {
 	log         *os.File
-	index       *Index // using mmap
-	baseOffset  uint64 // first offset for this segment
-	nextOffset  uint64 // next offset to be written
+	index       *Index // mmap-backed
+	baseOffset  uint64
+	nextOffset  uint64
 	maxLogSize  uint64
 	currentSize uint64
 
-	indexIntervalBytes uint64 // min bytes written between two index entries (sparse index)
-	bytesSinceIndex    uint64 // bytes written since the last index entry
+	indexIntervalBytes uint64 // min bytes between two index entries (sparse index)
+	bytesSinceIndex    uint64
 
-	mu sync.RWMutex // for write-safely when multiple producers send messages at the same time
+	mu sync.RWMutex
 }
 
 // SegmentConfig holds tunable parameters for a single segment.
 type SegmentConfig struct {
 	MaxLogSize         uint64        // max bytes the .log file can grow before rolling
 	MaxIndexSize       uint64        // max bytes for the memory-mapped index
-	IndexIntervalBytes uint64        // min bytes written between two index entries (sparse index)
-	RetentionPeriod    time.Duration // how long a segment is kept before eligible for deletion
+	IndexIntervalBytes uint64        // min bytes between two index entries (sparse index)
+	RetentionPeriod    time.Duration
 	FlushInterval      time.Duration // how often buffered writes are fsynced to disk
 }
 
-// NewSegment creates and fully initialises a Segment from a config.
-// It opens (or creates) the .log and .index files, recovers state from
-// existing data on disk, and is ready to accept Append/Read calls.
 func NewSegment(dir string, baseOffset uint64, c SegmentConfig) (*Segment, error) {
 	logPath := fmt.Sprintf("%s/%020d.log", dir, baseOffset)
 	indexPath := fmt.Sprintf("%s/%020d.index", dir, baseOffset)
@@ -75,7 +67,6 @@ func NewSegment(dir string, baseOffset uint64, c SegmentConfig) (*Segment, error
 		indexIntervalBytes: c.IndexIntervalBytes,
 	}
 
-	// Recovery: read current log size
 	fi, err := logFile.Stat()
 	if err != nil {
 		return nil, err
@@ -129,7 +120,6 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	enc.PutUint64(header[:offsetWidth], curOffset)
 	enc.PutUint32(header[offsetWidth:], uint32(len(message)))
 
-	// Write header and message to the log file
 	if _, err := s.log.Write(header); err != nil {
 		return 0, err
 	}
@@ -138,9 +128,8 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	}
 
 	pos := s.currentSize
-	// Sparse index: always index the first record of a segment (so lookups
-	// starting at baseOffset never scan from position 0), otherwise only
-	// once enough bytes have accumulated since the last indexed entry.
+	// Always index the first record (so lookups at baseOffset never scan
+	// from position 0); otherwise only once enough bytes have accumulated.
 	if pos == 0 || s.bytesSinceIndex >= s.indexIntervalBytes {
 		if err := s.index.Write(uint32(curOffset-s.baseOffset), pos); err != nil {
 			return 0, err
@@ -156,8 +145,7 @@ func (s *Segment) Append(message []byte) (offset uint64, err error) {
 	return curOffset, nil
 }
 
-// Close flushes the index down to its actual used size and closes both
-// the log and index files. The segment must not be used after Close.
+// Close must be the last call on a Segment — it is not usable afterward.
 func (s *Segment) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
