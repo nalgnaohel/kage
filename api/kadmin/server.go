@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/nalgnaohel/kage/api/rpc/api/proto/kadmin"
+	pb "github.com/nalgnaohel/kage/api/rpc/kadmin"
 	"github.com/nalgnaohel/kage/broker"
 )
 

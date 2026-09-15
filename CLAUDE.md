@@ -26,15 +26,15 @@ go test ./test/broker/... -v           # broker package tests (topic/cluster man
 go test ./test/broker/... -update      # regenerate golden fixtures after an intentional behavior change
 ```
 
-Regenerating gRPC code from `.proto` sources (`api/rpc/api/proto/<plane>/*.pb.go` mirrors
-`api/proto/<plane>/*.proto` under the `--go_out` dir, i.e. `paths=source_relative` — note the doubled
-`api/proto` path segment, a side effect of `--go_out=api/rpc` with paths already rooted at `api/proto`):
+Regenerating gRPC code from `.proto` sources (`api/rpc/<plane>/*.pb.go` mirrors
+`api/proto/<plane>/*.proto` under the `--go_out` dir, i.e. `paths=source_relative` — `--proto_path`
+is rooted at `api/proto` itself so the generated tree lands flat under `api/rpc`, no doubled segment):
 
 ```
-protoc --proto_path=. \
+protoc --proto_path=api/proto \
   --go_out=api/rpc --go_opt=paths=source_relative \
   --go-grpc_out=api/rpc --go-grpc_opt=paths=source_relative \
-  api/proto/data/data.proto api/proto/kadmin/kadmin.proto
+  data/data.proto kadmin/kadmin.proto
 ```
 
 ## Architecture
@@ -128,15 +128,15 @@ packages, split by plane per the project's control/data-plane split:
 - **`data/data.proto`** (`option go_package = "kage/rpc/data"`) — data plane, client-facing:
   `GetMetadata` (partition→leader discovery, meant to be called once and cached, not on every
   message), `Produce`, `Fetch` (long-poll style via `max_wait_ms`/`min_bytes`), `CommitOffset`/
-  `GetOffset`, `ListOffsets`. Generated code: `api/rpc/api/proto/data/data.{pb,grpc.pb}.go`, package
-  `data` (import path `github.com/nalgnaohel/kage/api/rpc/api/proto/data`).
+  `GetOffset`, `ListOffsets`. Generated code: `api/rpc/data/data.{pb,grpc.pb}.go`, package
+  `data` (import path `github.com/nalgnaohel/kage/api/rpc/data`).
 - **`kadmin/kadmin.proto`** (`option go_package = "kage/rpc/kadmin"`) — control/admin plane:
   `CreateTopic`/`DeleteTopic`/`ListTopics`/`DescribeTopic`, `GetClusterInfo`. `PartitionInfo`/
   `PartitionMetadata` already carry `leader`/`replicas`/`isr` fields anticipating the Raft + ISR phases
-  even though nothing populates them yet. Generated code: `api/rpc/api/proto/kadmin/kadmin.{pb,grpc.pb}.go`,
-  package `kadmin` (import path `github.com/nalgnaohel/kage/api/rpc/api/proto/kadmin`).
+  even though nothing populates them yet. Generated code: `api/rpc/kadmin/kadmin.{pb,grpc.pb}.go`,
+  package `kadmin` (import path `github.com/nalgnaohel/kage/api/rpc/kadmin`).
 - **`api/kadmin`** (hand-written, package `kadmin` — a different import path than the generated
-  `.../api/rpc/api/proto/kadmin` package, which callers alias as `pb`) implements
+  `.../api/rpc/kadmin` package, which callers alias as `pb`) implements
   `kadmin.KafkaAdminServer` by wrapping a `*broker.Registry`: each RPC is a thin translation to the
   matching `Registry`/topic-management method. `CreateTopic`/`DeleteTopic` report domain errors via
   `success=false, message=...` (the proto has no error-code field); `DescribeTopic` returns a gRPC

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v5.27.0
-// source: api/proto/data/data.proto
+// source: data/data.proto
 
 package data
 
@@ -317,5 +317,5 @@ var KageDataService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api/proto/data/data.proto",
+	Metadata: "data/data.proto",
 }

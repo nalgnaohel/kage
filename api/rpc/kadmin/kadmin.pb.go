@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v5.27.0
-// source: api/proto/kadmin/kadmin.proto
+// source: kadmin/kadmin.proto
 
 package kadmin
 
@@ -32,7 +32,7 @@ type CreateTopicRequest struct {
 
 func (x *CreateTopicRequest) Reset() {
 	*x = CreateTopicRequest{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[0]
+	mi := &file_kadmin_kadmin_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +44,7 @@ func (x *CreateTopicRequest) String() string {
 func (*CreateTopicRequest) ProtoMessage() {}
 
 func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[0]
+	mi := &file_kadmin_kadmin_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +57,7 @@ func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTopicRequest.ProtoReflect.Descriptor instead.
 func (*CreateTopicRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{0}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *CreateTopicRequest) GetTopicName() string {
@@ -91,7 +91,7 @@ type CreateTopicResponse struct {
 
 func (x *CreateTopicResponse) Reset() {
 	*x = CreateTopicResponse{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[1]
+	mi := &file_kadmin_kadmin_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +103,7 @@ func (x *CreateTopicResponse) String() string {
 func (*CreateTopicResponse) ProtoMessage() {}
 
 func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[1]
+	mi := &file_kadmin_kadmin_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +116,7 @@ func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTopicResponse.ProtoReflect.Descriptor instead.
 func (*CreateTopicResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{1}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateTopicResponse) GetSuccess() bool {
@@ -142,7 +142,7 @@ type DeleteTopicRequest struct {
 
 func (x *DeleteTopicRequest) Reset() {
 	*x = DeleteTopicRequest{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[2]
+	mi := &file_kadmin_kadmin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +154,7 @@ func (x *DeleteTopicRequest) String() string {
 func (*DeleteTopicRequest) ProtoMessage() {}
 
 func (x *DeleteTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[2]
+	mi := &file_kadmin_kadmin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +167,7 @@ func (x *DeleteTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTopicRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTopicRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{2}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DeleteTopicRequest) GetTopicName() string {
@@ -187,7 +187,7 @@ type DeleteTopicResponse struct {
 
 func (x *DeleteTopicResponse) Reset() {
 	*x = DeleteTopicResponse{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[3]
+	mi := &file_kadmin_kadmin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -199,7 +199,7 @@ func (x *DeleteTopicResponse) String() string {
 func (*DeleteTopicResponse) ProtoMessage() {}
 
 func (x *DeleteTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[3]
+	mi := &file_kadmin_kadmin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +212,7 @@ func (x *DeleteTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTopicResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTopicResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{3}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DeleteTopicResponse) GetSuccess() bool {
@@ -237,7 +237,7 @@ type ListTopicsRequest struct {
 
 func (x *ListTopicsRequest) Reset() {
 	*x = ListTopicsRequest{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[4]
+	mi := &file_kadmin_kadmin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -249,7 +249,7 @@ func (x *ListTopicsRequest) String() string {
 func (*ListTopicsRequest) ProtoMessage() {}
 
 func (x *ListTopicsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[4]
+	mi := &file_kadmin_kadmin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +262,7 @@ func (x *ListTopicsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTopicsRequest.ProtoReflect.Descriptor instead.
 func (*ListTopicsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{4}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{4}
 }
 
 type ListTopicsResponse struct {
@@ -274,7 +274,7 @@ type ListTopicsResponse struct {
 
 func (x *ListTopicsResponse) Reset() {
 	*x = ListTopicsResponse{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[5]
+	mi := &file_kadmin_kadmin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +286,7 @@ func (x *ListTopicsResponse) String() string {
 func (*ListTopicsResponse) ProtoMessage() {}
 
 func (x *ListTopicsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[5]
+	mi := &file_kadmin_kadmin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +299,7 @@ func (x *ListTopicsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTopicsResponse.ProtoReflect.Descriptor instead.
 func (*ListTopicsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{5}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListTopicsResponse) GetTopics() []string {
@@ -318,7 +318,7 @@ type DescribeTopicRequest struct {
 
 func (x *DescribeTopicRequest) Reset() {
 	*x = DescribeTopicRequest{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[6]
+	mi := &file_kadmin_kadmin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -330,7 +330,7 @@ func (x *DescribeTopicRequest) String() string {
 func (*DescribeTopicRequest) ProtoMessage() {}
 
 func (x *DescribeTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[6]
+	mi := &file_kadmin_kadmin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -343,7 +343,7 @@ func (x *DescribeTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeTopicRequest.ProtoReflect.Descriptor instead.
 func (*DescribeTopicRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{6}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DescribeTopicRequest) GetTopicName() string {
@@ -365,7 +365,7 @@ type DescribeTopicResponse struct {
 
 func (x *DescribeTopicResponse) Reset() {
 	*x = DescribeTopicResponse{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[7]
+	mi := &file_kadmin_kadmin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -377,7 +377,7 @@ func (x *DescribeTopicResponse) String() string {
 func (*DescribeTopicResponse) ProtoMessage() {}
 
 func (x *DescribeTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[7]
+	mi := &file_kadmin_kadmin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -390,7 +390,7 @@ func (x *DescribeTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeTopicResponse.ProtoReflect.Descriptor instead.
 func (*DescribeTopicResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{7}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DescribeTopicResponse) GetTopicName() string {
@@ -433,7 +433,7 @@ type PartitionInfo struct {
 
 func (x *PartitionInfo) Reset() {
 	*x = PartitionInfo{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[8]
+	mi := &file_kadmin_kadmin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -445,7 +445,7 @@ func (x *PartitionInfo) String() string {
 func (*PartitionInfo) ProtoMessage() {}
 
 func (x *PartitionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[8]
+	mi := &file_kadmin_kadmin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -458,7 +458,7 @@ func (x *PartitionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartitionInfo.ProtoReflect.Descriptor instead.
 func (*PartitionInfo) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{8}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PartitionInfo) GetPartitionId() int32 {
@@ -497,7 +497,7 @@ type GetClusterInfoRequest struct {
 
 func (x *GetClusterInfoRequest) Reset() {
 	*x = GetClusterInfoRequest{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[9]
+	mi := &file_kadmin_kadmin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -509,7 +509,7 @@ func (x *GetClusterInfoRequest) String() string {
 func (*GetClusterInfoRequest) ProtoMessage() {}
 
 func (x *GetClusterInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[9]
+	mi := &file_kadmin_kadmin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -522,7 +522,7 @@ func (x *GetClusterInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClusterInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetClusterInfoRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{9}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{9}
 }
 
 type GetClusterInfoResponse struct {
@@ -535,7 +535,7 @@ type GetClusterInfoResponse struct {
 
 func (x *GetClusterInfoResponse) Reset() {
 	*x = GetClusterInfoResponse{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[10]
+	mi := &file_kadmin_kadmin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -547,7 +547,7 @@ func (x *GetClusterInfoResponse) String() string {
 func (*GetClusterInfoResponse) ProtoMessage() {}
 
 func (x *GetClusterInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[10]
+	mi := &file_kadmin_kadmin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -560,7 +560,7 @@ func (x *GetClusterInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClusterInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetClusterInfoResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{10}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetClusterInfoResponse) GetClusterId() string {
@@ -588,7 +588,7 @@ type BrokerInfo struct {
 
 func (x *BrokerInfo) Reset() {
 	*x = BrokerInfo{}
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[11]
+	mi := &file_kadmin_kadmin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -600,7 +600,7 @@ func (x *BrokerInfo) String() string {
 func (*BrokerInfo) ProtoMessage() {}
 
 func (x *BrokerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_kadmin_kadmin_proto_msgTypes[11]
+	mi := &file_kadmin_kadmin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -613,7 +613,7 @@ func (x *BrokerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerInfo.ProtoReflect.Descriptor instead.
 func (*BrokerInfo) Descriptor() ([]byte, []int) {
-	return file_api_proto_kadmin_kadmin_proto_rawDescGZIP(), []int{11}
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *BrokerInfo) GetBrokerId() int32 {
@@ -637,11 +637,11 @@ func (x *BrokerInfo) GetPort() int32 {
 	return 0
 }
 
-var File_api_proto_kadmin_kadmin_proto protoreflect.FileDescriptor
+var File_kadmin_kadmin_proto protoreflect.FileDescriptor
 
-const file_api_proto_kadmin_kadmin_proto_rawDesc = "" +
+const file_kadmin_kadmin_proto_rawDesc = "" +
 	"\n" +
-	"\x1dapi/proto/kadmin/kadmin.proto\x12\vkage.kadmin\"\x89\x01\n" +
+	"\x13kadmin/kadmin.proto\x12\vkage.kadmin\"\x89\x01\n" +
 	"\x12CreateTopicRequest\x12\x1d\n" +
 	"\n" +
 	"topic_name\x18\x01 \x01(\tR\ttopicName\x12%\n" +
@@ -698,19 +698,19 @@ const file_api_proto_kadmin_kadmin_proto_rawDesc = "" +
 	"\x0eGetClusterInfo\x12\".kage.kadmin.GetClusterInfoRequest\x1a#.kage.kadmin.GetClusterInfoResponseB\x11Z\x0fkage/rpc/kadminb\x06proto3"
 
 var (
-	file_api_proto_kadmin_kadmin_proto_rawDescOnce sync.Once
-	file_api_proto_kadmin_kadmin_proto_rawDescData []byte
+	file_kadmin_kadmin_proto_rawDescOnce sync.Once
+	file_kadmin_kadmin_proto_rawDescData []byte
 )
 
-func file_api_proto_kadmin_kadmin_proto_rawDescGZIP() []byte {
-	file_api_proto_kadmin_kadmin_proto_rawDescOnce.Do(func() {
-		file_api_proto_kadmin_kadmin_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_proto_kadmin_kadmin_proto_rawDesc), len(file_api_proto_kadmin_kadmin_proto_rawDesc)))
+func file_kadmin_kadmin_proto_rawDescGZIP() []byte {
+	file_kadmin_kadmin_proto_rawDescOnce.Do(func() {
+		file_kadmin_kadmin_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_kadmin_kadmin_proto_rawDesc), len(file_kadmin_kadmin_proto_rawDesc)))
 	})
-	return file_api_proto_kadmin_kadmin_proto_rawDescData
+	return file_kadmin_kadmin_proto_rawDescData
 }
 
-var file_api_proto_kadmin_kadmin_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
-var file_api_proto_kadmin_kadmin_proto_goTypes = []any{
+var file_kadmin_kadmin_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_kadmin_kadmin_proto_goTypes = []any{
 	(*CreateTopicRequest)(nil),     // 0: kage.kadmin.CreateTopicRequest
 	(*CreateTopicResponse)(nil),    // 1: kage.kadmin.CreateTopicResponse
 	(*DeleteTopicRequest)(nil),     // 2: kage.kadmin.DeleteTopicRequest
@@ -725,7 +725,7 @@ var file_api_proto_kadmin_kadmin_proto_goTypes = []any{
 	(*BrokerInfo)(nil),             // 11: kage.kadmin.BrokerInfo
 	nil,                            // 12: kage.kadmin.DescribeTopicResponse.PartitionsEntry
 }
-var file_api_proto_kadmin_kadmin_proto_depIdxs = []int32{
+var file_kadmin_kadmin_proto_depIdxs = []int32{
 	12, // 0: kage.kadmin.DescribeTopicResponse.partitions:type_name -> kage.kadmin.DescribeTopicResponse.PartitionsEntry
 	11, // 1: kage.kadmin.GetClusterInfoResponse.brokers:type_name -> kage.kadmin.BrokerInfo
 	8,  // 2: kage.kadmin.DescribeTopicResponse.PartitionsEntry.value:type_name -> kage.kadmin.PartitionInfo
@@ -746,26 +746,26 @@ var file_api_proto_kadmin_kadmin_proto_depIdxs = []int32{
 	0,  // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_api_proto_kadmin_kadmin_proto_init() }
-func file_api_proto_kadmin_kadmin_proto_init() {
-	if File_api_proto_kadmin_kadmin_proto != nil {
+func init() { file_kadmin_kadmin_proto_init() }
+func file_kadmin_kadmin_proto_init() {
+	if File_kadmin_kadmin_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_kadmin_kadmin_proto_rawDesc), len(file_api_proto_kadmin_kadmin_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kadmin_kadmin_proto_rawDesc), len(file_kadmin_kadmin_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_api_proto_kadmin_kadmin_proto_goTypes,
-		DependencyIndexes: file_api_proto_kadmin_kadmin_proto_depIdxs,
-		MessageInfos:      file_api_proto_kadmin_kadmin_proto_msgTypes,
+		GoTypes:           file_kadmin_kadmin_proto_goTypes,
+		DependencyIndexes: file_kadmin_kadmin_proto_depIdxs,
+		MessageInfos:      file_kadmin_kadmin_proto_msgTypes,
 	}.Build()
-	File_api_proto_kadmin_kadmin_proto = out.File
-	file_api_proto_kadmin_kadmin_proto_goTypes = nil
-	file_api_proto_kadmin_kadmin_proto_depIdxs = nil
+	File_kadmin_kadmin_proto = out.File
+	file_kadmin_kadmin_proto_goTypes = nil
+	file_kadmin_kadmin_proto_depIdxs = nil
 }

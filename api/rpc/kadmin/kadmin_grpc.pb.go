@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v5.27.0
-// source: api/proto/kadmin/kadmin.proto
+// source: kadmin/kadmin.proto
 
 package kadmin
 
@@ -271,5 +271,5 @@ var KafkaAdmin_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api/proto/kadmin/kadmin.proto",
+	Metadata: "kadmin/kadmin.proto",
 }

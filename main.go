@@ -11,7 +11,7 @@ import (
 	"github.com/nalgnaohel/kage/broker"
 	"github.com/nalgnaohel/kage/storage"
 
-	pb "github.com/nalgnaohel/kage/api/rpc/api/proto/kadmin"
+	pb "github.com/nalgnaohel/kage/api/rpc/kadmin"
 )
 
 func main() {
