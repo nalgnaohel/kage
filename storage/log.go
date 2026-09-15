@@ -140,3 +140,32 @@ func (l *Log) Read(offset uint64) ([]byte, error) {
 
 	return l.segments[idx].Read(offset)
 }
+
+// LocateRange routes to the owning segment of startOffset with the given maxBytes.
+func (l *Log) LocateRange(startOffset uint64, maxBytes int32) (seg *Segment, rng SegmentRange, err error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	idx := sort.Search(len(l.segments), func(i int) bool {
+		return l.segments[i].nextOffset > startOffset
+	})
+
+	if idx == len(l.segments) || l.segments[idx].baseOffset > startOffset {
+		return nil, SegmentRange{}, fmt.Errorf("offset %d is out of range (current max: %d)", startOffset, l.activeSegment.nextOffset-1)
+	}
+
+	seg = l.segments[idx]
+	rng, err = seg.LocateRange(startOffset, maxBytes)
+	if err != nil {
+		return nil, SegmentRange{}, err
+	}
+	return seg, rng, nil
+}
+
+// HighWatermark returns activeSegment.nextOffset.
+func (l *Log) HighWatermark() uint64 {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return l.activeSegment.nextOffset
+}

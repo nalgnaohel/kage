@@ -19,6 +19,7 @@ var enc = binary.BigEndian
 
 type Segment struct {
 	log         *os.File
+	logPath     string
 	index       *Index // mmap-backed
 	baseOffset  uint64
 	nextOffset  uint64
@@ -33,9 +34,9 @@ type Segment struct {
 
 // SegmentConfig holds tunable parameters for a single segment.
 type SegmentConfig struct {
-	MaxLogSize         uint64        // max bytes the .log file can grow before rolling
-	MaxIndexSize       uint64        // max bytes for the memory-mapped index
-	IndexIntervalBytes uint64        // min bytes between two index entries (sparse index)
+	MaxLogSize         uint64 // max bytes the .log file can grow before rolling
+	MaxIndexSize       uint64 // max bytes for the memory-mapped index
+	IndexIntervalBytes uint64 // min bytes between two index entries (sparse index)
 	RetentionPeriod    time.Duration
 	FlushInterval      time.Duration // how often buffered writes are fsynced to disk
 }
@@ -61,6 +62,7 @@ func NewSegment(dir string, baseOffset uint64, c SegmentConfig) (*Segment, error
 
 	s := &Segment{
 		log:                logFile,
+		logPath:            logPath,
 		index:              idx,
 		baseOffset:         baseOffset,
 		maxLogSize:         c.MaxLogSize,
@@ -159,6 +161,28 @@ func (s *Segment) Close() error {
 	return s.log.Close()
 }
 
+// walkRecords scans sequentially from physical position startPos, a shared logic helper.
+func (s *Segment) walkRecords(startPos int64, visit func(off uint64, recPos, recLen int64) (keepGoing bool)) error {
+	pos := startPos
+	for pos < int64(s.currentSize) {
+		header := make([]byte, offsetWidth+lenWidth)
+		if _, err := s.log.ReadAt(header, pos); err != nil {
+			return err
+		}
+
+		off := enc.Uint64(header[:offsetWidth])
+		size := enc.Uint32(header[offsetWidth:])
+		recLen := int64(offsetWidth+lenWidth) + int64(size)
+
+		if !visit(off, pos, recLen) {
+			return nil
+		}
+
+		pos += recLen
+	}
+	return nil
+}
+
 func (s *Segment) Read(offset uint64) (message []byte, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -169,30 +193,107 @@ func (s *Segment) Read(offset uint64) (message []byte, err error) {
 		return nil, err
 	}
 
-	currPos := int64(physicalPos)
-	for {
-		header := make([]byte, offsetWidth+lenWidth)
-		if _, err := s.log.ReadAt(header, currPos); err != nil {
-			if err == io.EOF {
-				return nil, io.ErrUnexpectedEOF
+	var (
+		data     []byte
+		found    bool
+		notFound bool
+		readErr  error
+	)
+	walkErr := s.walkRecords(int64(physicalPos), func(off uint64, recPos, recLen int64) bool {
+		if off == offset {
+			buf := make([]byte, recLen-int64(offsetWidth+lenWidth))
+			if _, e := s.log.ReadAt(buf, recPos+int64(offsetWidth+lenWidth)); e != nil {
+				readErr = e
+				return false
 			}
-			return nil, err
+			data = buf
+			found = true
+			return false
 		}
 
-		actualOff := enc.Uint64(header[:offsetWidth])
-		msgSize := enc.Uint32(header[offsetWidth:])
-		if actualOff == offset {
-			data := make([]byte, msgSize)
-			if _, err := s.log.ReadAt(data, currPos+int64(offsetWidth+lenWidth)); err != nil {
-				return nil, err
-			}
-			return data, nil
+		if off > offset {
+			notFound = true
+			return false
 		}
 
-		if actualOff > offset {
-			return nil, fmt.Errorf("offset %d not found", offset)
-		}
+		return true
+	})
 
-		currPos += int64(offsetWidth+lenWidth) + int64(msgSize)
+	if readErr != nil {
+		return nil, readErr
 	}
+	if walkErr != nil {
+		if walkErr == io.EOF {
+			return nil, io.ErrUnexpectedEOF
+		}
+		return nil, walkErr
+	}
+	if notFound {
+		return nil, fmt.Errorf("offset %d not found", offset)
+	}
+	if !found {
+		// Ran off the end of the segment's committed data without ever seeing
+		// offset — same "corrupt/short read" signal the old unbounded scan
+		// produced by hitting ReadAt's io.EOF past the real file size.
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	return data, nil
+}
+
+type SegmentRange struct {
+	Pos        int64  // byte offset of the first record's header in the .log file
+	Length     int64  // total bytes spanned (whole records only)
+	NextOffset uint64 // offset to resume fetching from
+}
+
+func (s *Segment) LocateRange(startOffset uint64, maxBytes int32) (SegmentRange, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	relOffset := startOffset - s.baseOffset
+	_, physicalPos, err := s.index.Read(int64(relOffset))
+	if err != nil {
+		return SegmentRange{}, err
+	}
+
+	var (
+		segmentRange SegmentRange
+		started      bool
+		total        int64
+		notFound     bool
+	)
+	walkErr := s.walkRecords(int64(physicalPos), func(off uint64, recPos, recLen int64) bool {
+		if !started {
+			if off < startOffset {
+				return true
+			}
+			if off > startOffset {
+				notFound = true
+				return false
+			}
+			segmentRange.Pos = recPos
+			started = true
+		}
+
+		total += recLen
+		segmentRange.NextOffset = off + 1
+
+		return total < int64(maxBytes)
+	})
+	if walkErr != nil {
+		return SegmentRange{}, walkErr
+	}
+	if notFound || !started {
+		return SegmentRange{}, fmt.Errorf("offset %d not found", startOffset)
+	}
+
+	segmentRange.Length = total
+	return segmentRange, nil
+}
+
+// OpenReader opens a brand-new, independent, read-only handle to this segment's log
+// file -> avoid race condition while reading from the segment's log file concurrently with appends.
+func (s *Segment) OpenReader() (*os.File, error) {
+	return os.Open(s.logPath)
 }
