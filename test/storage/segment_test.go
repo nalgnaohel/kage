@@ -1,7 +1,11 @@
 package storage_test
 
 import (
+	"bytes"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"sync"
 	"testing"
 
 	"github.com/nalgnaohel/kage/storage"
@@ -223,6 +227,219 @@ func TestSegmentClose_ThenReopen_PreservesDataAndNextOffset(t *testing.T) {
 		RecoveredPayloadAtTwo string
 		ReadErr               string
 	}{off, string(got), errString(readErr)})
+}
+
+func TestSegmentLocateRange_ReturnsWholeRecordsWithinMaxBytes(t *testing.T) {
+	// input: 3 records of equal size (16 bytes on disk each: 12-byte header
+	// + 4-byte payload), LocateRange(0, maxBytes=32) - exactly enough for
+	// the first 2 records, not the third
+	// golden: Pos/Length/NextOffset plus a hex dump of the bytes at
+	// [Pos,Pos+Length) read independently via ReadAt - proves the span is
+	// exactly the first 2 whole records, not a partial third
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1<<20, 1024, 4096))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := seg.Append([]byte(fmt.Sprintf("rec%d", i))); err != nil {
+			t.Fatalf("Append #%d: %v", i, err)
+		}
+	}
+
+	rng, err := seg.LocateRange(0, 32)
+	if err != nil {
+		t.Fatalf("LocateRange: %v", err)
+	}
+	raw := readRawLogBytes(t, dir, 0, rng.Pos, rng.Length)
+
+	assertGolden(t, "segment", struct {
+		Pos        int64
+		Length     int64
+		NextOffset uint64
+		HexBytes   string
+	}{rng.Pos, rng.Length, rng.NextOffset, hex.EncodeToString(raw)})
+}
+
+func TestSegmentLocateRange_AlwaysReturnsAtLeastOneRecordEvenOverMaxBytes(t *testing.T) {
+	// input: 2 records of 16 bytes each on disk, LocateRange(0, maxBytes=1)
+	// - smaller than even one whole record
+	// golden: Pos/Length/NextOffset plus a hex dump - proves exactly one
+	// whole record is returned (Length=16 > maxBytes=1), never zero records
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1<<20, 1024, 4096))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := seg.Append([]byte(fmt.Sprintf("rec%d", i))); err != nil {
+			t.Fatalf("Append #%d: %v", i, err)
+		}
+	}
+
+	rng, err := seg.LocateRange(0, 1)
+	if err != nil {
+		t.Fatalf("LocateRange: %v", err)
+	}
+	raw := readRawLogBytes(t, dir, 0, rng.Pos, rng.Length)
+
+	assertGolden(t, "segment", struct {
+		Pos        int64
+		Length     int64
+		NextOffset uint64
+		HexBytes   string
+	}{rng.Pos, rng.Length, rng.NextOffset, hex.EncodeToString(raw)})
+}
+
+func TestSegmentLocateRange_CapsAtSegmentEnd(t *testing.T) {
+	// input: 3 records, LocateRange(0, maxBytes=1<<20) - far larger than
+	// the segment's total committed data
+	// golden: Pos/Length/NextOffset plus a hex dump - proves the scan stops
+	// cleanly at the segment's actual end (NextOffset equals the count of
+	// records written) instead of erroring or reading past currentSize
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1<<20, 1024, 4096))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := seg.Append([]byte(fmt.Sprintf("rec%d", i))); err != nil {
+			t.Fatalf("Append #%d: %v", i, err)
+		}
+	}
+
+	rng, err := seg.LocateRange(0, 1<<20)
+	if err != nil {
+		t.Fatalf("LocateRange: %v", err)
+	}
+	raw := readRawLogBytes(t, dir, 0, rng.Pos, rng.Length)
+
+	assertGolden(t, "segment", struct {
+		Pos        int64
+		Length     int64
+		NextOffset uint64
+		HexBytes   string
+	}{rng.Pos, rng.Length, rng.NextOffset, hex.EncodeToString(raw)})
+}
+
+func TestSegmentLocateRange_UnindexedOffset_FoundByLinearScan(t *testing.T) {
+	// input: IndexIntervalBytes set very high (1<<30) so only the first
+	// record (offset 0) ever gets an index entry; append 4 small records
+	// and LocateRange starting at the last, never-indexed offset
+	// golden: Pos/Length/NextOffset plus a hex dump - proves LocateRange
+	// falls back to the same linear-scan-forward behavior as Read when the
+	// requested offset isn't itself indexed
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1<<20, 4096, 1<<30))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+	var last uint64
+	for i := 0; i < 4; i++ {
+		off, err := seg.Append([]byte(fmt.Sprintf("v%d", i)))
+		if err != nil {
+			t.Fatalf("Append #%d: %v", i, err)
+		}
+		last = off
+	}
+
+	rng, err := seg.LocateRange(last, 1<<20)
+	if err != nil {
+		t.Fatalf("LocateRange: %v", err)
+	}
+	raw := readRawLogBytes(t, dir, 0, rng.Pos, rng.Length)
+
+	assertGolden(t, "segment", struct {
+		Pos        int64
+		Length     int64
+		NextOffset uint64
+		HexBytes   string
+	}{rng.Pos, rng.Length, rng.NextOffset, hex.EncodeToString(raw)})
+}
+
+func TestSegmentLocateRange_OffsetNotFound_ReturnsError(t *testing.T) {
+	// input: Append a single record at offset 0, then LocateRange(100, ...)
+	// golden: the error returned for a never-written offset
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1024, 1024, 4096))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+	if _, err := seg.Append([]byte("only")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	_, err = seg.LocateRange(100, 1024)
+	assertGolden(t, "segment", struct{ Err string }{errString(err)})
+}
+
+func TestSegmentOpenReader_ConcurrentWithAppend_NoInterference(t *testing.T) {
+	// input: one goroutine keeps Appending while another repeatedly opens a
+	// brand-new reader via OpenReader, Seeks to a span already located
+	// before the race starts, and reads it sequentially
+	// assertion (not golden - run with -race): the bytes read back never
+	// change across iterations, proving OpenReader's private handle is
+	// unaffected by concurrent Append on the shared s.log handle
+	dir := t.TempDir()
+	seg, err := storage.NewSegment(dir, 0, segCfg(1<<20, 4096, 4096))
+	if err != nil {
+		t.Fatalf("NewSegment: %v", err)
+	}
+
+	seedOff, err := seg.Append([]byte("seed-payload"))
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	rng, err := seg.LocateRange(seedOff, 1<<20)
+	if err != nil {
+		t.Fatalf("LocateRange: %v", err)
+	}
+	want := readRawLogBytes(t, dir, 0, rng.Pos, rng.Length)
+
+	const iterations = 200
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			if _, err := seg.Append([]byte(fmt.Sprintf("filler-%d", i))); err != nil {
+				t.Errorf("Append #%d: %v", i, err)
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			r, err := seg.OpenReader()
+			if err != nil {
+				t.Errorf("OpenReader #%d: %v", i, err)
+				return
+			}
+
+			if _, err := r.Seek(rng.Pos, io.SeekStart); err != nil {
+				t.Errorf("Seek #%d: %v", i, err)
+				r.Close()
+				return
+			}
+			got := make([]byte, rng.Length)
+			if _, err := io.ReadFull(r, got); err != nil {
+				t.Errorf("ReadFull #%d: %v", i, err)
+				r.Close()
+				return
+			}
+			r.Close()
+
+			if !bytes.Equal(got, want) {
+				t.Errorf("bytes at [%d,%d) changed on iteration %d: got %x want %x", rng.Pos, rng.Pos+rng.Length, i, got, want)
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestSegmentRecover_EmptyLogFile_StartsAtBaseOffset(t *testing.T) {

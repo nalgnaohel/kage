@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -180,6 +181,65 @@ func TestLogClose_ThenReopen_PreservesDataAcrossSegments(t *testing.T) {
 		PayloadAtZero    string
 		NextAppendOffset int
 	}{string(got), off})
+}
+
+func TestLogLocateRange_RoutesToCorrectSegment(t *testing.T) {
+	// input: force a rollover (MaxSegmentSize = 32) after writing an early
+	// record, then LocateRange starting at that early, no-longer-active
+	// segment's offset
+	// golden: Pos/Length/NextOffset (relative to the owning segment's own
+	// file) plus a hex dump of the bytes read independently from that
+	// segment's <baseOffset>.log - proves Log.LocateRange routed to the
+	// correct (non-active) segment and the span is byte-exact
+	dir := t.TempDir()
+	log, err := storage.NewLog(dir, logCfg(32, 4096, 4096))
+	if err != nil {
+		t.Fatalf("NewLog: %v", err)
+	}
+
+	firstOff, err := log.Append([]byte("first-record"))
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := log.Append([]byte(fmt.Sprintf("filler%d", i))); err != nil {
+			t.Fatalf("Append filler #%d: %v", i, err)
+		}
+	}
+
+	seg, rng, err := log.LocateRange(uint64(firstOff), 1<<20)
+	if err != nil {
+		t.Fatalf("LocateRange: %v", err)
+	}
+	if seg == nil {
+		t.Fatalf("LocateRange returned a nil segment")
+	}
+
+	raw := readRawLogBytes(t, dir, 0, rng.Pos, rng.Length)
+
+	assertGolden(t, "log", struct {
+		Pos        int64
+		Length     int64
+		NextOffset uint64
+		HexBytes   string
+	}{rng.Pos, rng.Length, rng.NextOffset, hex.EncodeToString(raw)})
+}
+
+func TestLogLocateRange_OutOfRange_ReturnsError(t *testing.T) {
+	// input: Append exactly one record, then LocateRange an offset far
+	// beyond anything ever written
+	// golden: the out-of-range error message
+	dir := t.TempDir()
+	log, err := storage.NewLog(dir, logCfg(1<<20, 4096, 4096))
+	if err != nil {
+		t.Fatalf("NewLog: %v", err)
+	}
+	if _, err := log.Append([]byte("only")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	_, _, err = log.LocateRange(9999, 1024)
+	assertGolden(t, "log", struct{ Err string }{errString(err)})
 }
 
 func TestNewLog_DiscoversPreexistingSegmentsInSortedOrder(t *testing.T) {

@@ -93,6 +93,26 @@ func encodeIndex(entries []rawIndexEntry) []byte {
 	return buf
 }
 
+// readRawLogBytes independently reads length bytes at pos from the segment's
+// on-disk <baseOffset>.log file, bypassing Segment/Log entirely — used to
+// prove a LocateRange result is byte-exact against the real file, not just
+// numerically plausible.
+func readRawLogBytes(t *testing.T, dir string, baseOffset uint64, pos, length int64) []byte {
+	t.Helper()
+	logPath := filepath.Join(dir, fmt.Sprintf("%020d.log", baseOffset))
+	f, err := os.Open(logPath)
+	if err != nil {
+		t.Fatalf("open raw log file: %v", err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, length)
+	if _, err := f.ReadAt(buf, pos); err != nil {
+		t.Fatalf("ReadAt raw log file: %v", err)
+	}
+	return buf
+}
+
 // writeSegmentFiles plants a pre-existing <baseOffset>.log/.index pair on
 // disk, simulating data left behind by a previous process run (e.g. right
 // before a crash). This lets recovery be tested without needing a Close()
