@@ -9,10 +9,12 @@ service KageDataService {
   rpc GetMetadata(MetadataRequest) returns (MetadataResponse);
 
   // Producer: Append records to the log
+  // Temporary: stays on gRPC only until api/rawdata's raw Produce ships (Round 2
+  // of docs/zero-copy-plan.md), then this RPC is removed too.
   rpc Produce(ProduceRequest) returns (ProduceResponse);
 
-  // Consumer: Pull records from the log with long-polling support
-  rpc Fetch(FetchRequest) returns (FetchResponse);
+  // Fetch moved to api/rawdata's raw TCP data plane for zero-copy sendfile(2)
+  // support — see docs/zero-copy-plan.md and docs/zero-copy-design.md.
 
   // Offset Management: Persist consumer progress
   rpc CommitOffset(OffsetCommitRequest) returns (OffsetCommitResponse);
@@ -75,31 +77,6 @@ message ProduceResponse {
   int64 base_offset = 1;
   int64 timestamp = 2;
   string error_code = 3;
-}
-
-// --- Fetch ---
-
-message FetchRequest {
-  string topic = 1;
-  int32 partition = 2;
-  int64 fetch_offset = 3;
-
-  int32 max_bytes = 4;
-  int32 min_bytes = 5;
-  int32 max_wait_ms = 6;
-}
-
-message FetchResponse {
-  repeated FetchRecord records = 1;
-  int64 high_watermark = 2;
-}
-
-message FetchRecord {
-  int64 offset = 1;
-  bytes key = 2;
-  bytes value = 3;
-  int64 timestamp = 4;
-  map<string, string> headers = 5;
 }
 
 // --- Offsets ---

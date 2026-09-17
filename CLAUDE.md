@@ -7,9 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Kage — a Kafka-inspired distributed message queue, built **KRaft-style**: Raft owns metadata/control
 plane, ISR (in-sync replicas) owns the data plane, deliberately kept separate so consensus never sits
 on the hot write path. The project is being built in three phases (see the "Project phase" section
-below); the repo today is early/mid Phase 1 — the storage engine plus a running single-broker `kadmin`
-gRPC control-plane server (topic create/list/describe/delete, cluster info). The data plane
-(`data.proto`'s Produce/Fetch) is still unwired scaffolding.
+below); the repo today is early/mid Phase 1 — the storage engine, a running single-broker `kadmin`
+gRPC control-plane server (topic create/list/describe/delete, cluster info), and a raw-TCP data-plane
+server (`api/rawdata`) serving `Fetch` over a zero-copy `sendfile(2)` path. `Produce` is still unwired
+scaffolding on `data.proto`'s gRPC service, staying there until Round 2 of `docs/zero-copy-plan.md`
+moves it to the raw path too.
 
 ## Commands
 
@@ -24,6 +26,8 @@ go test ./test/storage/... -run TestName -v   # run a single test
 go test ./test/storage/... -update     # regenerate golden fixtures after an intentional behavior change
 go test ./test/broker/... -v           # broker package tests (topic/cluster management)
 go test ./test/broker/... -update      # regenerate golden fixtures after an intentional behavior change
+go test ./test/rawdata/... -v          # raw TCP data-plane integration tests (Fetch)
+go test ./test/bench/... -bench=. -benchmem   # zero-copy vs legacy-decode Fetch benchmark
 ```
 
 Regenerating gRPC code from `.proto` sources (`api/rpc/<plane>/*.pb.go` mirrors
@@ -40,10 +44,11 @@ protoc --proto_path=api/proto \
 ## Architecture
 
 Three packages, cleanly layered: `storage` (the log engine) → `broker` (per-partition orchestration
-plus topic/cluster bookkeeping on top of the log engine) → `api` (gRPC surface: generated code under
-`api/rpc/...` plus a hand-written server implementation in `api/kadmin`). `main.go` wires
-`broker.Registry` to a running `kadmin` gRPC server — control/admin plane only; the data plane isn't
-wired to anything yet.
+plus topic/cluster bookkeeping on top of the log engine) → `api` (two servers: a gRPC control plane —
+generated code under `api/rpc/...` plus a hand-written server implementation in `api/kadmin` — and a
+hand-written raw-TCP data plane in `api/rawdata`). `main.go` wires `broker.Registry` to both: a
+`kadmin` gRPC server (control/admin plane) and a raw TCP server (data plane, `Fetch` only so far —
+`Produce` is still gRPC-only scaffolding).
 
 ### `storage`: the append-only log engine
 
@@ -81,6 +86,14 @@ Three-tier design, `Log` → `Segment` → `Index`:
 - `LogConfig`/`DefaultLogConfig()` centralizes `MaxSegmentSize`, `MaxIndexSize`, `IndexIntervalBytes`,
   `RetentionPeriod`, `FlushInterval`; retention/flushing are configured but not yet enforced anywhere
   in this package.
+- **Zero-copy Fetch support**: `Segment.LocateRange(startOffset, maxBytes)` reuses the same sparse-index
+  lookup as `Read`, then a shared `walkRecords` scan, to find the physical byte span of whole records
+  (never partial) starting at `startOffset` — always at least one record even if it alone exceeds
+  `maxBytes`. `Segment.OpenReader()` opens a brand-new, independent, read-only `*os.File` handle to the
+  segment's `.log` file, so a fetch's sequential `Seek`+`Read` never disturbs the shared file offset
+  `Append`/`Read` rely on. `Log.LocateRange`/`Log.HighWatermark` route to the owning segment and report
+  `activeSegment.nextOffset` respectively. Consumed by `api/rawdata`'s Fetch path — see
+  `docs/zero-copy-design.md`.
 - **Tests**: `test/storage/` is an external (`storage_test`) test suite covering `Index`/`Segment`/`Log`
   — append/read round trips, sparse-index nearest-lower-entry lookups, the linear-scan fallback for
   offsets that fall between sparse index entries, segment rollover, and crash recovery. Recovery cases
@@ -120,15 +133,19 @@ Three-tier design, `Log` → `Segment` → `Index`:
   package, results asserted via `.golden` JSON files under `test/broker/testdata/<registry|topic|
   cluster>/`, regenerate with `go test ./test/broker/... -update`.
 
-### `api`: gRPC surface
+### `api`: gRPC control plane + raw-TCP data plane
 
 Two `.proto` files, each in its own subdirectory under `api/proto/` so they generate into distinct Go
-packages, split by plane per the project's control/data-plane split:
+packages, split by plane per the project's control/data-plane split, plus a third, hand-written
+(no `.proto`) package for the raw-TCP data plane:
 
 - **`data/data.proto`** (`option go_package = "kage/rpc/data"`) — data plane, client-facing:
   `GetMetadata` (partition→leader discovery, meant to be called once and cached, not on every
-  message), `Produce`, `Fetch` (long-poll style via `max_wait_ms`/`min_bytes`), `CommitOffset`/
-  `GetOffset`, `ListOffsets`. Generated code: `api/rpc/data/data.{pb,grpc.pb}.go`, package
+  message), `Produce` (temporary — stays on gRPC only until Round 2 of `docs/zero-copy-plan.md` moves
+  it to `api/rawdata` too), `CommitOffset`/`GetOffset`, `ListOffsets`. `Fetch` and its
+  `FetchRequest`/`FetchResponse`/`FetchRecord` messages were removed (Round 1 of
+  `docs/zero-copy-plan.md`) in favor of `api/rawdata`'s zero-copy path — see
+  `docs/zero-copy-design.md`. Generated code: `api/rpc/data/data.{pb,grpc.pb}.go`, package
   `data` (import path `github.com/nalgnaohel/kage/api/rpc/data`).
 - **`kadmin/kadmin.proto`** (`option go_package = "kage/rpc/kadmin"`) — control/admin plane:
   `CreateTopic`/`DeleteTopic`/`ListTopics`/`DescribeTopic`, `GetClusterInfo`. `PartitionInfo`/
@@ -142,8 +159,17 @@ packages, split by plane per the project's control/data-plane split:
   `success=false, message=...` (the proto has no error-code field); `DescribeTopic` returns a gRPC
   `NotFound` status for an unknown topic and fills every partition's `leader`/`replicas`/`isr` with
   this single broker's own ID (placeholder until Raft/ISR exist). Registered in `main.go` (flags:
-  `-data-dir`, `-grpc-addr`, `-host`, `-port`, `-broker-id`, `-cluster-id`) — the only service
-  currently wired to a running server; `data.proto`'s service has no implementation yet.
+  `-data-dir`, `-grpc-addr`, `-raw-addr`, `-host`, `-port`, `-broker-id`, `-cluster-id`) as the `kadmin`
+  gRPC control-plane server; `data.proto`'s `Produce` RPC still has no server implementation.
+- **`api/rawdata`** (hand-written, package `rawdata`, no `.proto` — a small hand-rolled binary framing,
+  BigEndian, documented in `docs/zero-copy-design.md`) — the raw-TCP data plane. `protocol.go` defines
+  the request/response frame layout and both `ApiFetch`/`ApiProduce` API keys; `server.go`'s
+  `Server{registry *broker.Registry}` accepts connections and dispatches by API key; `fetch.go`
+  implements `ApiFetch` end-to-end (`Registry.GetLog` → `Log.LocateRange`/`HighWatermark` →
+  `Segment.OpenReader` → `io.CopyN` straight onto the `net.Conn`, hitting real `sendfile(2)`).
+  `ApiProduce` requests get a fixed `ErrInternal` response — real Produce handling is Round 2.
+  Registered in `main.go` via a second listener (`-raw-addr`, default `:9092`, Kafka's own client
+  port) running alongside the `kadmin` gRPC listener.
 
 ## Project phase (context for design decisions)
 
@@ -153,7 +179,9 @@ through a `hashicorp/raft` controller quorum (Phase 2, not started), while messa
 replicate leader→follower via ISR with a high-watermark, deliberately kept off the consensus hot path
 (Phase 3, not started). Message data must never be routed through Raft. Today's code is Phase 1: a
 working single-broker storage engine, a running `kadmin` gRPC control-plane server (topic/cluster
-management), and the `broker` package's `Flusher` scaffolding for the data plane — not wired to any
-server yet. `docs/zero-copy-plan.md` is a written-but-unstarted design for that data plane: it plans
-to bypass gRPC entirely for `Produce`/`Fetch` in favor of a raw TCP path, so `Fetch` can use kernel
-`sendfile(2)` (gRPC/HTTP2 framing and TLS both rule that out).
+management), and a raw-TCP data-plane server (`api/rawdata`) serving `Fetch`. `docs/zero-copy-plan.md`
+documents this data plane's design: bypass gRPC entirely for `Produce`/`Fetch` in favor of a raw TCP
+path, so `Fetch` can use kernel `sendfile(2)` (gRPC/HTTP2 framing and TLS both rule that out) — see
+`docs/zero-copy-design.md` for the as-built version. Round 1 (`Fetch`) is done; Round 2 (`Produce`,
+plus wiring the `broker` package's `Flusher` scaffolding to it) is not started — `Produce` still goes
+through `data.proto`'s gRPC RPC, which has no server implementation yet.
