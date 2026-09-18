@@ -9,9 +9,8 @@ plane, ISR (in-sync replicas) owns the data plane, deliberately kept separate so
 on the hot write path. The project is being built in three phases (see the "Project phase" section
 below); the repo today is early/mid Phase 1 — the storage engine, a running single-broker `kadmin`
 gRPC control-plane server (topic create/list/describe/delete, cluster info), and a raw-TCP data-plane
-server (`api/rawdata`) serving `Fetch` over a zero-copy `sendfile(2)` path. `Produce` is still unwired
-scaffolding on `data.proto`'s gRPC service, staying there until Round 2 of `docs/zero-copy-plan.md`
-moves it to the raw path too.
+server (`api/rawdata`) serving both `Fetch` (zero-copy `sendfile(2)`) and `Produce`. `data.proto` keeps
+only `GetMetadata`/`CommitOffset`/`GetOffset`/`ListOffsets` now that both moved to the raw path.
 
 ## Commands
 
@@ -47,8 +46,7 @@ Three packages, cleanly layered: `storage` (the log engine) → `broker` (per-pa
 plus topic/cluster bookkeeping on top of the log engine) → `api` (two servers: a gRPC control plane —
 generated code under `api/rpc/...` plus a hand-written server implementation in `api/kadmin` — and a
 hand-written raw-TCP data plane in `api/rawdata`). `main.go` wires `broker.Registry` to both: a
-`kadmin` gRPC server (control/admin plane) and a raw TCP server (data plane, `Fetch` only so far —
-`Produce` is still gRPC-only scaffolding).
+`kadmin` gRPC server (control/admin plane) and a raw TCP server (data plane: `Fetch` and `Produce`).
 
 ### `storage`: the append-only log engine
 
@@ -127,8 +125,10 @@ Three-tier design, `Log` → `Segment` → `Index`:
   and get back a `chan AppendResult` to block on; a background goroutine batches incoming
   `BatchItem`s and flushes to `storage.Log.Append` either when `batchSize` is reached or on a
   `lingerTime` ticker (classic group-commit). Each flushed item's result is delivered individually
-  down its own channel so the many producers waiting on one batch each unblock independently. Not
-  wired to any server yet — the data plane has no `GetFlusher`/lookup path built for it.
+  down its own channel so the many producers waiting on one batch each unblock independently.
+  `Registry.GetFlusher(topic, partition, batchSize, linger)` lazily creates and caches one per
+  partition (double-checked locking); `ok=false` if the log doesn't exist, since raw Produce doesn't
+  auto-create topics. Consumed by `api/rawdata`'s Produce path.
 - **Tests**: `test/broker/` mirrors `test/storage/`'s convention — an external (`broker_test`)
   package, results asserted via `.golden` JSON files under `test/broker/testdata/<registry|topic|
   cluster>/`, regenerate with `go test ./test/broker/... -update`.
@@ -141,12 +141,11 @@ packages, split by plane per the project's control/data-plane split, plus a thir
 
 - **`data/data.proto`** (`option go_package = "kage/rpc/data"`) — data plane, client-facing:
   `GetMetadata` (partition→leader discovery, meant to be called once and cached, not on every
-  message), `Produce` (temporary — stays on gRPC only until Round 2 of `docs/zero-copy-plan.md` moves
-  it to `api/rawdata` too), `CommitOffset`/`GetOffset`, `ListOffsets`. `Fetch` and its
-  `FetchRequest`/`FetchResponse`/`FetchRecord` messages were removed (Round 1 of
-  `docs/zero-copy-plan.md`) in favor of `api/rawdata`'s zero-copy path — see
-  `docs/zero-copy-design.md`. Generated code: `api/rpc/data/data.{pb,grpc.pb}.go`, package
-  `data` (import path `github.com/nalgnaohel/kage/api/rpc/data`).
+  message), `CommitOffset`/`GetOffset`, `ListOffsets`. `Fetch` and `Produce` (and their
+  `FetchRequest`/`FetchResponse`/`FetchRecord`/`ProduceRequest`/`ProduceResponse`/`Record` messages)
+  were both removed (`docs/zero-copy-plan.md`'s Round 1 and Round 2) in favor of `api/rawdata`'s
+  zero-copy path — see `docs/zero-copy-design.md`. Generated code: `api/rpc/data/data.{pb,grpc.pb}.go`,
+  package `data` (import path `github.com/nalgnaohel/kage/api/rpc/data`).
 - **`kadmin/kadmin.proto`** (`option go_package = "kage/rpc/kadmin"`) — control/admin plane:
   `CreateTopic`/`DeleteTopic`/`ListTopics`/`DescribeTopic`, `GetClusterInfo`. `PartitionInfo`/
   `PartitionMetadata` already carry `leader`/`replicas`/`isr` fields anticipating the Raft + ISR phases
@@ -160,16 +159,17 @@ packages, split by plane per the project's control/data-plane split, plus a thir
   `NotFound` status for an unknown topic and fills every partition's `leader`/`replicas`/`isr` with
   this single broker's own ID (placeholder until Raft/ISR exist). Registered in `main.go` (flags:
   `-data-dir`, `-grpc-addr`, `-raw-addr`, `-host`, `-port`, `-broker-id`, `-cluster-id`) as the `kadmin`
-  gRPC control-plane server; `data.proto`'s `Produce` RPC still has no server implementation.
+  gRPC control-plane server.
 - **`api/rawdata`** (hand-written, package `rawdata`, no `.proto` — a small hand-rolled binary framing,
-  BigEndian, documented in `docs/zero-copy-design.md`) — the raw-TCP data plane. `protocol.go` defines
-  the request/response frame layout and both `ApiFetch`/`ApiProduce` API keys; `server.go`'s
-  `Server{registry *broker.Registry}` accepts connections and dispatches by API key; `fetch.go`
-  implements `ApiFetch` end-to-end (`Registry.GetLog` → `Log.LocateRange`/`HighWatermark` →
-  `Segment.OpenReader` → `io.CopyN` straight onto the `net.Conn`, hitting real `sendfile(2)`).
-  `ApiProduce` requests get a fixed `ErrInternal` response — real Produce handling is Round 2.
-  Registered in `main.go` via a second listener (`-raw-addr`, default `:9092`, Kafka's own client
-  port) running alongside the `kadmin` gRPC listener.
+  BigEndian, documented in `docs/zero-copy-design.md`) — the raw-TCP data plane, both `Fetch` and
+  `Produce`. `protocol.go` defines the request/response frame layout and both `ApiFetch`/`ApiProduce`
+  API keys; `server.go`'s `Server{registry *broker.Registry}` accepts connections and dispatches by API
+  key; `fetch.go` implements `ApiFetch` end-to-end (`Registry.GetLog` → `Log.LocateRange`/
+  `HighWatermark` → `Segment.OpenReader` → `io.CopyN` straight onto the `net.Conn`, hitting real
+  `sendfile(2)`); `produce.go` implements `ApiProduce` (`Registry.GetFlusher` → `Flusher.Push` → block
+  on the result channel → `EncodeProduceResponse` with the new `baseOffset`). Registered in `main.go`
+  via a second listener (`-raw-addr`, default `:9092`, Kafka's own client port) running alongside the
+  `kadmin` gRPC listener.
 
 ## Project phase (context for design decisions)
 
@@ -179,9 +179,8 @@ through a `hashicorp/raft` controller quorum (Phase 2, not started), while messa
 replicate leader→follower via ISR with a high-watermark, deliberately kept off the consensus hot path
 (Phase 3, not started). Message data must never be routed through Raft. Today's code is Phase 1: a
 working single-broker storage engine, a running `kadmin` gRPC control-plane server (topic/cluster
-management), and a raw-TCP data-plane server (`api/rawdata`) serving `Fetch`. `docs/zero-copy-plan.md`
-documents this data plane's design: bypass gRPC entirely for `Produce`/`Fetch` in favor of a raw TCP
-path, so `Fetch` can use kernel `sendfile(2)` (gRPC/HTTP2 framing and TLS both rule that out) — see
-`docs/zero-copy-design.md` for the as-built version. Round 1 (`Fetch`) is done; Round 2 (`Produce`,
-plus wiring the `broker` package's `Flusher` scaffolding to it) is not started — `Produce` still goes
-through `data.proto`'s gRPC RPC, which has no server implementation yet.
+management), and a raw-TCP data-plane server (`api/rawdata`) serving both `Fetch` and `Produce`.
+`docs/zero-copy-plan.md` documents this data plane's design: bypass gRPC entirely for `Produce`/`Fetch`
+in favor of a raw TCP path, so `Fetch` can use kernel `sendfile(2)` (gRPC/HTTP2 framing and TLS both
+rule that out) — see `docs/zero-copy-design.md` for the as-built version. Both Round 1 (`Fetch`) and
+Round 2 (`Produce`) are done; `data.proto` no longer carries either RPC.

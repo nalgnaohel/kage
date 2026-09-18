@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nalgnaohel/kage/storage"
 )
@@ -19,6 +20,9 @@ type Registry struct {
 
 	// logs: topic -> partition -> Log
 	logs map[string]map[int32]*storage.Log
+
+	// flushers: topic -> partition -> Flusher
+	flushers map[string]map[int32]*Flusher
 
 	// Immutable after construction (no lock needed to read). Single-broker
 	// only until Raft/KRaft cluster membership exists (Phase 2).
@@ -33,6 +37,7 @@ func NewRegistry(baseDir string, cfg storage.LogConfig, clusterID string, broker
 		baseDir:   baseDir,
 		config:    cfg,
 		logs:      make(map[string]map[int32]*storage.Log),
+		flushers:  make(map[string]map[int32]*Flusher),
 		topics:    make(map[string]TopicConfig),
 		clusterID: clusterID,
 		brokerID:  brokerID,
@@ -144,4 +149,40 @@ func (r *Registry) CreateLog(topic string, partition int32) (*storage.Log, error
 	}
 	r.logs[topic][partition] = newLog
 	return newLog, nil
+}
+
+func (r *Registry) GetFlusher(topic string, partition int32, batchSize int, linger time.Duration) (*Flusher, bool) {
+	r.mu.RLock()
+	if pMap, ok := r.flushers[topic]; ok {
+		if fl, ok := pMap[partition]; ok {
+			r.mu.RUnlock()
+			return fl, true
+		}
+	}
+	r.mu.RUnlock()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if pMap, ok := r.flushers[topic]; ok {
+		if fl, ok := pMap[partition]; ok {
+			return fl, true
+		}
+	}
+
+	pMap, ok := r.logs[topic]
+	if !ok {
+		return nil, false
+	}
+	l, ok := pMap[partition]
+	if !ok {
+		return nil, false
+	}
+
+	fl := NewFlusher(l, batchSize, linger)
+	if r.flushers[topic] == nil {
+		r.flushers[topic] = make(map[int32]*Flusher)
+	}
+	r.flushers[topic][partition] = fl
+	return fl, true
 }

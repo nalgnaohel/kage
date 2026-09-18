@@ -297,211 +297,6 @@ func (x *PartitionMetadata) GetIsr() []int32 {
 	return nil
 }
 
-type ProduceRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Topic     string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
-	Partition int32                  `protobuf:"varint,2,opt,name=partition,proto3" json:"partition,omitempty"`
-	// acks: 0 (none), 1 (leader only), -1 (all ISR/Raft quorum)
-	RequiredAcks  int32     `protobuf:"varint,3,opt,name=required_acks,json=requiredAcks,proto3" json:"required_acks,omitempty"`
-	TimeoutMs     int32     `protobuf:"varint,4,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
-	Records       []*Record `protobuf:"bytes,5,rep,name=records,proto3" json:"records,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProduceRequest) Reset() {
-	*x = ProduceRequest{}
-	mi := &file_data_data_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProduceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProduceRequest) ProtoMessage() {}
-
-func (x *ProduceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProduceRequest.ProtoReflect.Descriptor instead.
-func (*ProduceRequest) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *ProduceRequest) GetTopic() string {
-	if x != nil {
-		return x.Topic
-	}
-	return ""
-}
-
-func (x *ProduceRequest) GetPartition() int32 {
-	if x != nil {
-		return x.Partition
-	}
-	return 0
-}
-
-func (x *ProduceRequest) GetRequiredAcks() int32 {
-	if x != nil {
-		return x.RequiredAcks
-	}
-	return 0
-}
-
-func (x *ProduceRequest) GetTimeoutMs() int32 {
-	if x != nil {
-		return x.TimeoutMs
-	}
-	return 0
-}
-
-func (x *ProduceRequest) GetRecords() []*Record {
-	if x != nil {
-		return x.Records
-	}
-	return nil
-}
-
-type Record struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Record) Reset() {
-	*x = Record{}
-	mi := &file_data_data_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Record) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Record) ProtoMessage() {}
-
-func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Record.ProtoReflect.Descriptor instead.
-func (*Record) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *Record) GetKey() []byte {
-	if x != nil {
-		return x.Key
-	}
-	return nil
-}
-
-func (x *Record) GetValue() []byte {
-	if x != nil {
-		return x.Value
-	}
-	return nil
-}
-
-func (x *Record) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
-func (x *Record) GetHeaders() map[string]string {
-	if x != nil {
-		return x.Headers
-	}
-	return nil
-}
-
-type ProduceResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BaseOffset    int64                  `protobuf:"varint,1,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	ErrorCode     string                 `protobuf:"bytes,3,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProduceResponse) Reset() {
-	*x = ProduceResponse{}
-	mi := &file_data_data_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProduceResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProduceResponse) ProtoMessage() {}
-
-func (x *ProduceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProduceResponse.ProtoReflect.Descriptor instead.
-func (*ProduceResponse) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *ProduceResponse) GetBaseOffset() int64 {
-	if x != nil {
-		return x.BaseOffset
-	}
-	return 0
-}
-
-func (x *ProduceResponse) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
-func (x *ProduceResponse) GetErrorCode() string {
-	if x != nil {
-		return x.ErrorCode
-	}
-	return ""
-}
-
 type OffsetCommitRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ConsumerGroup string                 `protobuf:"bytes,1,opt,name=consumer_group,json=consumerGroup,proto3" json:"consumer_group,omitempty"`
@@ -515,7 +310,7 @@ type OffsetCommitRequest struct {
 
 func (x *OffsetCommitRequest) Reset() {
 	*x = OffsetCommitRequest{}
-	mi := &file_data_data_proto_msgTypes[8]
+	mi := &file_data_data_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -527,7 +322,7 @@ func (x *OffsetCommitRequest) String() string {
 func (*OffsetCommitRequest) ProtoMessage() {}
 
 func (x *OffsetCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[8]
+	mi := &file_data_data_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -540,7 +335,7 @@ func (x *OffsetCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetCommitRequest.ProtoReflect.Descriptor instead.
 func (*OffsetCommitRequest) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{8}
+	return file_data_data_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *OffsetCommitRequest) GetConsumerGroup() string {
@@ -587,7 +382,7 @@ type OffsetCommitResponse struct {
 
 func (x *OffsetCommitResponse) Reset() {
 	*x = OffsetCommitResponse{}
-	mi := &file_data_data_proto_msgTypes[9]
+	mi := &file_data_data_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -599,7 +394,7 @@ func (x *OffsetCommitResponse) String() string {
 func (*OffsetCommitResponse) ProtoMessage() {}
 
 func (x *OffsetCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[9]
+	mi := &file_data_data_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -612,7 +407,7 @@ func (x *OffsetCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetCommitResponse.ProtoReflect.Descriptor instead.
 func (*OffsetCommitResponse) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{9}
+	return file_data_data_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *OffsetCommitResponse) GetSuccess() bool {
@@ -633,7 +428,7 @@ type OffsetFetchRequest struct {
 
 func (x *OffsetFetchRequest) Reset() {
 	*x = OffsetFetchRequest{}
-	mi := &file_data_data_proto_msgTypes[10]
+	mi := &file_data_data_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -645,7 +440,7 @@ func (x *OffsetFetchRequest) String() string {
 func (*OffsetFetchRequest) ProtoMessage() {}
 
 func (x *OffsetFetchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[10]
+	mi := &file_data_data_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -658,7 +453,7 @@ func (x *OffsetFetchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetFetchRequest.ProtoReflect.Descriptor instead.
 func (*OffsetFetchRequest) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{10}
+	return file_data_data_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *OffsetFetchRequest) GetConsumerGroup() string {
@@ -691,7 +486,7 @@ type OffsetFetchResponse struct {
 
 func (x *OffsetFetchResponse) Reset() {
 	*x = OffsetFetchResponse{}
-	mi := &file_data_data_proto_msgTypes[11]
+	mi := &file_data_data_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -703,7 +498,7 @@ func (x *OffsetFetchResponse) String() string {
 func (*OffsetFetchResponse) ProtoMessage() {}
 
 func (x *OffsetFetchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[11]
+	mi := &file_data_data_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -716,7 +511,7 @@ func (x *OffsetFetchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetFetchResponse.ProtoReflect.Descriptor instead.
 func (*OffsetFetchResponse) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{11}
+	return file_data_data_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *OffsetFetchResponse) GetOffset() int64 {
@@ -738,7 +533,7 @@ type ListOffsetsRequest struct {
 
 func (x *ListOffsetsRequest) Reset() {
 	*x = ListOffsetsRequest{}
-	mi := &file_data_data_proto_msgTypes[12]
+	mi := &file_data_data_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +545,7 @@ func (x *ListOffsetsRequest) String() string {
 func (*ListOffsetsRequest) ProtoMessage() {}
 
 func (x *ListOffsetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[12]
+	mi := &file_data_data_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +558,7 @@ func (x *ListOffsetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsRequest.ProtoReflect.Descriptor instead.
 func (*ListOffsetsRequest) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{12}
+	return file_data_data_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListOffsetsRequest) GetTopic() string {
@@ -796,7 +591,7 @@ type ListOffsetsResponse struct {
 
 func (x *ListOffsetsResponse) Reset() {
 	*x = ListOffsetsResponse{}
-	mi := &file_data_data_proto_msgTypes[13]
+	mi := &file_data_data_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -808,7 +603,7 @@ func (x *ListOffsetsResponse) String() string {
 func (*ListOffsetsResponse) ProtoMessage() {}
 
 func (x *ListOffsetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_data_data_proto_msgTypes[13]
+	mi := &file_data_data_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -821,7 +616,7 @@ func (x *ListOffsetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsResponse.ProtoReflect.Descriptor instead.
 func (*ListOffsetsResponse) Descriptor() ([]byte, []int) {
-	return file_data_data_proto_rawDescGZIP(), []int{13}
+	return file_data_data_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListOffsetsResponse) GetOffset() int64 {
@@ -854,28 +649,7 @@ const file_data_data_proto_rawDesc = "" +
 	"\fpartition_id\x18\x01 \x01(\x05R\vpartitionId\x12\x1b\n" +
 	"\tleader_id\x18\x02 \x01(\x05R\bleaderId\x12\x1a\n" +
 	"\breplicas\x18\x03 \x03(\x05R\breplicas\x12\x10\n" +
-	"\x03isr\x18\x04 \x03(\x05R\x03isr\"\xb5\x01\n" +
-	"\x0eProduceRequest\x12\x14\n" +
-	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1c\n" +
-	"\tpartition\x18\x02 \x01(\x05R\tpartition\x12#\n" +
-	"\rrequired_acks\x18\x03 \x01(\x05R\frequiredAcks\x12\x1d\n" +
-	"\n" +
-	"timeout_ms\x18\x04 \x01(\x05R\ttimeoutMs\x12+\n" +
-	"\arecords\x18\x05 \x03(\v2\x11.kage.data.RecordR\arecords\"\xc4\x01\n" +
-	"\x06Record\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x128\n" +
-	"\aheaders\x18\x04 \x03(\v2\x1e.kage.data.Record.HeadersEntryR\aheaders\x1a:\n" +
-	"\fHeadersEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"o\n" +
-	"\x0fProduceResponse\x12\x1f\n" +
-	"\vbase_offset\x18\x01 \x01(\x03R\n" +
-	"baseOffset\x12\x1c\n" +
-	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x1d\n" +
-	"\n" +
-	"error_code\x18\x03 \x01(\tR\terrorCode\"\xa4\x01\n" +
+	"\x03isr\x18\x04 \x03(\x05R\x03isr\"\xa4\x01\n" +
 	"\x13OffsetCommitRequest\x12%\n" +
 	"\x0econsumer_group\x18\x01 \x01(\tR\rconsumerGroup\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x1c\n" +
@@ -895,10 +669,9 @@ const file_data_data_proto_rawDesc = "" +
 	"\tpartition\x18\x02 \x01(\x05R\tpartition\x12\x1a\n" +
 	"\bstrategy\x18\x03 \x01(\x03R\bstrategy\"-\n" +
 	"\x13ListOffsetsResponse\x12\x16\n" +
-	"\x06offset\x18\x01 \x01(\x03R\x06offset2\x86\x03\n" +
+	"\x06offset\x18\x01 \x01(\x03R\x06offset2\xc4\x02\n" +
 	"\x0fKageDataService\x12F\n" +
-	"\vGetMetadata\x12\x1a.kage.data.MetadataRequest\x1a\x1b.kage.data.MetadataResponse\x12@\n" +
-	"\aProduce\x12\x19.kage.data.ProduceRequest\x1a\x1a.kage.data.ProduceResponse\x12O\n" +
+	"\vGetMetadata\x12\x1a.kage.data.MetadataRequest\x1a\x1b.kage.data.MetadataResponse\x12O\n" +
 	"\fCommitOffset\x12\x1e.kage.data.OffsetCommitRequest\x1a\x1f.kage.data.OffsetCommitResponse\x12J\n" +
 	"\tGetOffset\x12\x1d.kage.data.OffsetFetchRequest\x1a\x1e.kage.data.OffsetFetchResponse\x12L\n" +
 	"\vListOffsets\x12\x1d.kage.data.ListOffsetsRequest\x1a\x1e.kage.data.ListOffsetsResponseB\x0fZ\rkage/rpc/datab\x06proto3"
@@ -915,45 +688,37 @@ func file_data_data_proto_rawDescGZIP() []byte {
 	return file_data_data_proto_rawDescData
 }
 
-var file_data_data_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_data_data_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_data_data_proto_goTypes = []any{
 	(*MetadataRequest)(nil),      // 0: kage.data.MetadataRequest
 	(*MetadataResponse)(nil),     // 1: kage.data.MetadataResponse
 	(*Broker)(nil),               // 2: kage.data.Broker
 	(*TopicMetadata)(nil),        // 3: kage.data.TopicMetadata
 	(*PartitionMetadata)(nil),    // 4: kage.data.PartitionMetadata
-	(*ProduceRequest)(nil),       // 5: kage.data.ProduceRequest
-	(*Record)(nil),               // 6: kage.data.Record
-	(*ProduceResponse)(nil),      // 7: kage.data.ProduceResponse
-	(*OffsetCommitRequest)(nil),  // 8: kage.data.OffsetCommitRequest
-	(*OffsetCommitResponse)(nil), // 9: kage.data.OffsetCommitResponse
-	(*OffsetFetchRequest)(nil),   // 10: kage.data.OffsetFetchRequest
-	(*OffsetFetchResponse)(nil),  // 11: kage.data.OffsetFetchResponse
-	(*ListOffsetsRequest)(nil),   // 12: kage.data.ListOffsetsRequest
-	(*ListOffsetsResponse)(nil),  // 13: kage.data.ListOffsetsResponse
-	nil,                          // 14: kage.data.Record.HeadersEntry
+	(*OffsetCommitRequest)(nil),  // 5: kage.data.OffsetCommitRequest
+	(*OffsetCommitResponse)(nil), // 6: kage.data.OffsetCommitResponse
+	(*OffsetFetchRequest)(nil),   // 7: kage.data.OffsetFetchRequest
+	(*OffsetFetchResponse)(nil),  // 8: kage.data.OffsetFetchResponse
+	(*ListOffsetsRequest)(nil),   // 9: kage.data.ListOffsetsRequest
+	(*ListOffsetsResponse)(nil),  // 10: kage.data.ListOffsetsResponse
 }
 var file_data_data_proto_depIdxs = []int32{
 	2,  // 0: kage.data.MetadataResponse.brokers:type_name -> kage.data.Broker
 	3,  // 1: kage.data.MetadataResponse.topics:type_name -> kage.data.TopicMetadata
 	4,  // 2: kage.data.TopicMetadata.partitions:type_name -> kage.data.PartitionMetadata
-	6,  // 3: kage.data.ProduceRequest.records:type_name -> kage.data.Record
-	14, // 4: kage.data.Record.headers:type_name -> kage.data.Record.HeadersEntry
-	0,  // 5: kage.data.KageDataService.GetMetadata:input_type -> kage.data.MetadataRequest
-	5,  // 6: kage.data.KageDataService.Produce:input_type -> kage.data.ProduceRequest
-	8,  // 7: kage.data.KageDataService.CommitOffset:input_type -> kage.data.OffsetCommitRequest
-	10, // 8: kage.data.KageDataService.GetOffset:input_type -> kage.data.OffsetFetchRequest
-	12, // 9: kage.data.KageDataService.ListOffsets:input_type -> kage.data.ListOffsetsRequest
-	1,  // 10: kage.data.KageDataService.GetMetadata:output_type -> kage.data.MetadataResponse
-	7,  // 11: kage.data.KageDataService.Produce:output_type -> kage.data.ProduceResponse
-	9,  // 12: kage.data.KageDataService.CommitOffset:output_type -> kage.data.OffsetCommitResponse
-	11, // 13: kage.data.KageDataService.GetOffset:output_type -> kage.data.OffsetFetchResponse
-	13, // 14: kage.data.KageDataService.ListOffsets:output_type -> kage.data.ListOffsetsResponse
-	10, // [10:15] is the sub-list for method output_type
-	5,  // [5:10] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	0,  // 3: kage.data.KageDataService.GetMetadata:input_type -> kage.data.MetadataRequest
+	5,  // 4: kage.data.KageDataService.CommitOffset:input_type -> kage.data.OffsetCommitRequest
+	7,  // 5: kage.data.KageDataService.GetOffset:input_type -> kage.data.OffsetFetchRequest
+	9,  // 6: kage.data.KageDataService.ListOffsets:input_type -> kage.data.ListOffsetsRequest
+	1,  // 7: kage.data.KageDataService.GetMetadata:output_type -> kage.data.MetadataResponse
+	6,  // 8: kage.data.KageDataService.CommitOffset:output_type -> kage.data.OffsetCommitResponse
+	8,  // 9: kage.data.KageDataService.GetOffset:output_type -> kage.data.OffsetFetchResponse
+	10, // 10: kage.data.KageDataService.ListOffsets:output_type -> kage.data.ListOffsetsResponse
+	7,  // [7:11] is the sub-list for method output_type
+	3,  // [3:7] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_data_data_proto_init() }
@@ -967,7 +732,7 @@ func file_data_data_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_data_data_proto_rawDesc), len(file_data_data_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

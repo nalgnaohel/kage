@@ -37,7 +37,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		case ApiFetch:
 			s.handleFetch(conn, hdr, body)
 		case ApiProduce:
-			EncodeFetchResponseHeader(conn, hdr.CorrelationID, ErrInternal, 0, 0, 0)
+			s.handleProduce(conn, hdr, body)
 		default:
 			return
 		}

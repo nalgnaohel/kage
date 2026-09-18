@@ -20,7 +20,6 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	KageDataService_GetMetadata_FullMethodName  = "/kage.data.KageDataService/GetMetadata"
-	KageDataService_Produce_FullMethodName      = "/kage.data.KageDataService/Produce"
 	KageDataService_CommitOffset_FullMethodName = "/kage.data.KageDataService/CommitOffset"
 	KageDataService_GetOffset_FullMethodName    = "/kage.data.KageDataService/GetOffset"
 	KageDataService_ListOffsets_FullMethodName  = "/kage.data.KageDataService/ListOffsets"
@@ -32,10 +31,6 @@ const (
 type KageDataServiceClient interface {
 	// Discovery: Used by clients to locate partition leaders
 	GetMetadata(ctx context.Context, in *MetadataRequest, opts ...grpc.CallOption) (*MetadataResponse, error)
-	// Producer: Append records to the log
-	// Temporary: stays on gRPC only until api/rawdata's raw Produce ships (Round 2
-	// of docs/zero-copy-plan.md), then this RPC is removed too.
-	Produce(ctx context.Context, in *ProduceRequest, opts ...grpc.CallOption) (*ProduceResponse, error)
 	// Offset Management: Persist consumer progress
 	CommitOffset(ctx context.Context, in *OffsetCommitRequest, opts ...grpc.CallOption) (*OffsetCommitResponse, error)
 	GetOffset(ctx context.Context, in *OffsetFetchRequest, opts ...grpc.CallOption) (*OffsetFetchResponse, error)
@@ -55,16 +50,6 @@ func (c *kageDataServiceClient) GetMetadata(ctx context.Context, in *MetadataReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MetadataResponse)
 	err := c.cc.Invoke(ctx, KageDataService_GetMetadata_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *kageDataServiceClient) Produce(ctx context.Context, in *ProduceRequest, opts ...grpc.CallOption) (*ProduceResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ProduceResponse)
-	err := c.cc.Invoke(ctx, KageDataService_Produce_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -107,10 +92,6 @@ func (c *kageDataServiceClient) ListOffsets(ctx context.Context, in *ListOffsets
 type KageDataServiceServer interface {
 	// Discovery: Used by clients to locate partition leaders
 	GetMetadata(context.Context, *MetadataRequest) (*MetadataResponse, error)
-	// Producer: Append records to the log
-	// Temporary: stays on gRPC only until api/rawdata's raw Produce ships (Round 2
-	// of docs/zero-copy-plan.md), then this RPC is removed too.
-	Produce(context.Context, *ProduceRequest) (*ProduceResponse, error)
 	// Offset Management: Persist consumer progress
 	CommitOffset(context.Context, *OffsetCommitRequest) (*OffsetCommitResponse, error)
 	GetOffset(context.Context, *OffsetFetchRequest) (*OffsetFetchResponse, error)
@@ -128,9 +109,6 @@ type UnimplementedKageDataServiceServer struct{}
 
 func (UnimplementedKageDataServiceServer) GetMetadata(context.Context, *MetadataRequest) (*MetadataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMetadata not implemented")
-}
-func (UnimplementedKageDataServiceServer) Produce(context.Context, *ProduceRequest) (*ProduceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Produce not implemented")
 }
 func (UnimplementedKageDataServiceServer) CommitOffset(context.Context, *OffsetCommitRequest) (*OffsetCommitResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CommitOffset not implemented")
@@ -176,24 +154,6 @@ func _KageDataService_GetMetadata_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(KageDataServiceServer).GetMetadata(ctx, req.(*MetadataRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KageDataService_Produce_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ProduceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KageDataServiceServer).Produce(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KageDataService_Produce_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KageDataServiceServer).Produce(ctx, req.(*ProduceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -262,10 +222,6 @@ var KageDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMetadata",
 			Handler:    _KageDataService_GetMetadata_Handler,
-		},
-		{
-			MethodName: "Produce",
-			Handler:    _KageDataService_Produce_Handler,
 		},
 		{
 			MethodName: "CommitOffset",

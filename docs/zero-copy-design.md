@@ -1,20 +1,19 @@
-# Zero-copy Fetch: raw TCP data-plane design
+# Zero-copy raw TCP data-plane design
 
-This document describes the raw TCP data-plane path (`api/rawdata`) that carries `Fetch` in place of
-gRPC, and the storage-layer support for it (`storage/segment.go`, `storage/log.go`). See
+This document describes the raw TCP data-plane path (`api/rawdata`) that carries `Fetch` and `Produce`
+in place of gRPC, and the storage-layer support for it (`storage/segment.go`, `storage/log.go`). See
 `docs/zero-copy-plan.md` for the implementation plan and rationale trail this was built from — this
 doc is the as-built reference, matching `docs/storage-design.md`'s role for the storage engine.
 
-Status: Round 1 (Fetch) is implemented and covered by automated tests/benchmarks. Produce still goes
-through the `kadmin`-adjacent gRPC service (`api/rpc/data`) — see Known trade-offs.
+Status: both Round 1 (Fetch) and Round 2 (Produce) are implemented and covered by automated tests.
+`data.proto` no longer has `Fetch` or `Produce` — `GetMetadata`/`CommitOffset`/`GetOffset`/
+`ListOffsets` are all that's left on gRPC.
 
 TODO (manual verification, not yet done):
 - `strace -f -e trace=sendfile -p <pid>` against a running broker during a real Fetch, to directly
   confirm the `sendfile(2)` syscall fires.
-- End-to-end interop check: produce a record via the real `kadmin`-adjacent gRPC `Produce` RPC, then
-  fetch it back via the raw TCP path, and confirm the bytes match. The current automated integration
-  test (`test/rawdata/fetch_test.go`) writes via `storage.Log.Append` directly and doesn't exercise the
-  gRPC server, so this hasn't been checked against a real running server yet.
+- End-to-end interop check against a real running broker (not the in-process test harness): produce a
+  record via the raw TCP path, then fetch it back via the same path, and confirm the bytes match.
 
 ## Why this shape
 
@@ -45,15 +44,30 @@ FetchRequest body:
 | topicLen     | topic     | partition     | fetchOffset    | maxBytes      |
 | 2B           | topicLen  | 4B            | 8B             | 4B            |
 +--------------+-----------+---------------+----------------+---------------+
+
+ProduceRequest body:
++--------------+-----------+---------------+----------------+---------------+-----------+
+| topicLen     | topic     | partition     | requiredAcks   | valueLen      | value     |
+| 2B           | topicLen  | 4B            | 1B             | 4B            | valueLen  |
++--------------+-----------+---------------+----------------+---------------+-----------+
 ```
 
-Response frame — the payload is the raw on-disk record span, byte-for-byte, never decoded:
+Fetch response frame — the payload is the raw on-disk record span, byte-for-byte, never decoded:
 
 ```
 +--------------+----------------+-----------+----------------+----------------+---------------+-----------+
 | totalLength  | correlationID  | errorCode | highWatermark  | nextOffset     | payloadLength | payload   |
 | 4B           | 4B             | 2B        | 8B             | 8B             | 4B            | ...       |
 +--------------+----------------+-----------+----------------+----------------+---------------+-----------+
+```
+
+Produce response frame — no payload, just the new record's offset:
+
+```
++--------------+----------------+-----------+---------------+
+| totalLength  | correlationID  | errorCode | baseOffset    |
+| 4B           | 4B             | 2B        | 8B            |
++--------------+----------------+-----------+---------------+
 ```
 
 `Log.Read`/`Segment.Read` decode-and-return: they walk to the exact offset and copy just that one
@@ -81,9 +95,18 @@ that span is parsed; the caller transfers it as-is.
   `io.ReaderFrom`, which `*net.TCPConn` satisfies, and its `ReadFrom` unwraps the source down to the
   underlying `*os.File` to call the syscall directly — provided nothing wraps the `net.Conn` (no TLS,
   no `bufio.Writer`) between here and the actual write.
+- `broker.Registry.GetFlusher(topic, partition, batchSize, linger)` — lazily creates and caches a
+  `Flusher` per partition (double-checked locking), wrapping the topic/partition's existing `Log`.
+  `ok=false` if the log doesn't exist: raw Produce does not auto-create topics, matching real Kafka
+  with `auto.create` disabled — topic creation stays `kadmin`'s job.
+- `api/rawdata`'s Produce path (`produce.go`) — decodes the request, looks up (or lazily creates) the
+  partition's `Flusher` via `Registry.GetFlusher`, calls `fl.Push(req.Value)`, blocks on the returned
+  channel for the group-committed `AppendResult`, then `EncodeProduceResponse` with the resulting
+  `baseOffset`.
 - `main.go`'s raw TCP listener — a second `net.Listener` (`-raw-addr`, default `:9092`, Kafka's own
   client port) running `rawdata.Server.Serve` in its own goroutine, alongside the existing `kadmin`
-  gRPC listener.
+  gRPC listener. `Server.handleConn` dispatches both `ApiFetch` and `ApiProduce` requests over the same
+  connection loop.
 
 ## Known trade-offs
 
@@ -95,10 +118,13 @@ that span is parsed; the caller transfers it as-is.
 - **A fetch never crosses a segment boundary.** `LocateRange` only ever looks inside the one segment
   that owns `startOffset` — matches Kafka's own per-chunk-per-file Fetch behavior; a consumer near a
   segment boundary just issues another Fetch for the next range.
-- **Produce is still on gRPC.** `api/rawdata` defines `ApiProduce`'s wire format already but
-  `handleConn` only dispatches `ApiFetch`; an `ApiProduce` request gets back a fixed `ErrInternal`
-  response. Raw Produce, `broker.Registry.GetFlusher`, and removing `Produce` from `data.proto` are
-  Round 2 of `docs/zero-copy-plan.md`, not done here.
+- **No key/timestamp/headers on raw Produce v1.** `ProduceRequest` carries only an opaque `value
+  []byte`, matching `storage.Segment.Append([]byte)`'s existing signature — mirrors how Kafka's own
+  record-batch format is itself an opaque nested blob from the outer protocol's point of view.
+  `apiVersion` exists precisely so this can be extended later without a breaking wire-format change.
+- **`requiredAcks` is accepted but not enforced.** The field is decoded but `handleProduce` always
+  waits for the `Flusher`'s group-commit to finish before responding — there's no replication yet
+  (Phase 3), so "acks=0" (fire-and-forget) isn't distinguished from "acks=1" (leader ack) in practice.
 
 ## Benchmark
 

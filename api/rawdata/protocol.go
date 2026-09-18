@@ -23,15 +23,19 @@ const (
 )
 
 const (
-	topicLenWidth    = 2
-	partitionWidth   = 4
-	fetchOffsetWidth = 8
-	maxBytesWidth    = 4
+	topicLenWidth     = 2
+	partitionWidth    = 4
+	fetchOffsetWidth  = 8
+	maxBytesWidth     = 4
+	requiredAcksWidth = 1
+	valueLenWidth     = 4
 )
 
 const requestHeaderSize = 2 + 2 + 4
 
 const responseHeaderSize = 4 + 2 + 8 + 8 + 4
+
+const produceResponseHeaderSize = 4 + 2 + 8
 
 type RequestHeader struct {
 	APIKey        uint16
@@ -101,6 +105,36 @@ func DecodeFetchRequest(body []byte) (FetchRequest, error) {
 	}, nil
 }
 
+func DecodeProduceRequest(body []byte) (ProduceRequest, error) {
+	if len(body) < topicLenWidth {
+		return ProduceRequest{}, fmt.Errorf("rawdata: produce request too short")
+	}
+	topicLen := int(enc.Uint16(body[0:topicLenWidth]))
+	pos := topicLenWidth
+	if len(body) < pos+topicLen+partitionWidth+requiredAcksWidth+valueLenWidth {
+		return ProduceRequest{}, fmt.Errorf("rawdata: produce request truncated")
+	}
+
+	topic := string(body[pos : pos+topicLen])
+	pos += topicLen
+	partition := int32(enc.Uint32(body[pos : pos+partitionWidth]))
+	pos += partitionWidth
+	requiredAcks := body[pos]
+	pos += requiredAcksWidth
+	valueLen := int(enc.Uint32(body[pos : pos+valueLenWidth]))
+	pos += valueLenWidth
+	if len(body) < pos+valueLen {
+		return ProduceRequest{}, fmt.Errorf("rawdata: produce request truncated")
+	}
+
+	return ProduceRequest{
+		Topic:        topic,
+		Partition:    partition,
+		RequiredAcks: requiredAcks,
+		Value:        body[pos : pos+valueLen],
+	}, nil
+}
+
 func EncodeFetchResponseHeader(w io.Writer, correlationID uint32, code ErrorCode, hw, nextOffset uint64, payloadLen uint32) error {
 	totalLength := uint32(responseHeaderSize) + payloadLen
 
@@ -111,6 +145,17 @@ func EncodeFetchResponseHeader(w io.Writer, correlationID uint32, code ErrorCode
 	enc.PutUint64(buf[10:18], hw)
 	enc.PutUint64(buf[18:26], nextOffset)
 	enc.PutUint32(buf[26:30], payloadLen)
+
+	_, err := w.Write(buf)
+	return err
+}
+
+func EncodeProduceResponse(w io.Writer, correlationID uint32, code ErrorCode, baseOffset uint64) error {
+	buf := make([]byte, 4+produceResponseHeaderSize)
+	enc.PutUint32(buf[0:4], uint32(produceResponseHeaderSize))
+	enc.PutUint32(buf[4:8], correlationID)
+	enc.PutUint16(buf[8:10], uint16(code))
+	enc.PutUint64(buf[10:18], baseOffset)
 
 	_, err := w.Write(buf)
 	return err

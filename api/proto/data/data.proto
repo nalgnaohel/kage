@@ -8,13 +8,8 @@ service KageDataService {
   // Discovery: Used by clients to locate partition leaders
   rpc GetMetadata(MetadataRequest) returns (MetadataResponse);
 
-  // Producer: Append records to the log
-  // Temporary: stays on gRPC only until api/rawdata's raw Produce ships (Round 2
-  // of docs/zero-copy-plan.md), then this RPC is removed too.
-  rpc Produce(ProduceRequest) returns (ProduceResponse);
-
-  // Fetch moved to api/rawdata's raw TCP data plane for zero-copy sendfile(2)
-  // support — see docs/zero-copy-plan.md and docs/zero-copy-design.md.
+  // Produce and Fetch moved to api/rawdata's raw TCP data plane for zero-copy
+  // sendfile(2) support — see docs/zero-copy-plan.md and docs/zero-copy-design.md.
 
   // Offset Management: Persist consumer progress
   rpc CommitOffset(OffsetCommitRequest) returns (OffsetCommitResponse);
@@ -51,32 +46,6 @@ message PartitionMetadata {
   int32 leader_id = 2;
   repeated int32 replicas = 3;
   repeated int32 isr = 4;
-}
-
-// --- Produce ---
-
-message ProduceRequest {
-  string topic = 1;
-  int32 partition = 2;
-
-  // acks: 0 (none), 1 (leader only), -1 (all ISR/Raft quorum)
-  int32 required_acks = 3;
-  int32 timeout_ms = 4;
-
-  repeated Record records = 5;
-}
-
-message Record {
-  bytes key = 1;
-  bytes value = 2;
-  int64 timestamp = 3;
-  map<string, string> headers = 4;
-}
-
-message ProduceResponse {
-  int64 base_offset = 1;
-  int64 timestamp = 2;
-  string error_code = 3;
 }
 
 // --- Offsets ---
