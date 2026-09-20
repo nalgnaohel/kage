@@ -137,10 +137,10 @@ real loopback TCP connection, across two sub-cases: `Small_100Bx200recs` (200 re
 Representative output (`go test ./test/bench/... -bench=. -benchmem`):
 
 ```
-BenchmarkFetch_LegacyDecode/Small_100Bx200recs-12    1142    1072095 ns/op   111475 B/op    412 allocs/op
-BenchmarkFetch_LegacyDecode/Large_64KBx4recs-12      3110     373024 ns/op  1010882 B/op     16 allocs/op
-BenchmarkFetch_ZeroCopy/Small_100Bx200recs-12      112506      10784 ns/op      344 B/op      9 allocs/op
-BenchmarkFetch_ZeroCopy/Large_64KBx4recs-12         31195      33614 ns/op      344 B/op      9 allocs/op
+BenchmarkFetch_LegacyDecode/Small_100Bx200recs-12    1122   1017376 ns/op   111758 B/op    412 allocs/op
+BenchmarkFetch_LegacyDecode/Large_64KBx4recs-12      3223    369034 ns/op  1015727 B/op     16 allocs/op
+BenchmarkFetch_ZeroCopy/Small_100Bx200recs-12      115058       9953 ns/op      344 B/op      9 allocs/op
+BenchmarkFetch_ZeroCopy/Large_64KBx4recs-12         34196      31122 ns/op      344 B/op      9 allocs/op
 ```
 
 The shape matches the prediction: `BenchmarkFetch_ZeroCopy`'s `B/op`/`allocs/op` stay constant
@@ -151,6 +151,21 @@ between the two widens most at `Large_64KBx4recs`, since zero-copy's advantage t
 record count.
 
 `-benchmem` can't observe the `sendfile(2)` syscall itself, only its absence of allocation. To confirm
-it directly: run the broker, issue a real Fetch (e.g. a small throwaway client), and watch
-`strace -f -e trace=sendfile -p <pid>` for a `sendfile` line — a manual, one-time check, not part of
-the automated suite.
+it directly: run the broker, issue a real Fetch, and watch `strace -f -e trace=sendfile -p <pid>` for a
+`sendfile` line — a manual, one-time check, not part of the automated suite.
+
+`cmd/manualverify/main.go` is that manual client: `go run .` the broker, then `go run ./cmd/manualverify`
+against it — it creates a topic over the `kadmin` gRPC port, produces one record over the raw port, and
+fetches it back, printing whether the round-tripped value matches. Wrapping the broker's pid with
+`strace -f -e trace=sendfile -p <pid>` while this runs is the other half of the manual check above.
+
+Run 2026-09-20: the produce+fetch round trip matched end to end
+(`Fetch: highWatermark=2 value="hello-zero-copy" match=true`), and `strace -f -e trace=sendfile -p <pid>`
+against the running broker during that fetch showed the syscall firing directly:
+
+```
+sendfile(11, 12, NULL, 27) = 27
+```
+
+confirming the kernel copies record bytes straight from the segment file (fd 12) to the client socket
+(fd 11) with no user-space buffer in between, exactly as designed.

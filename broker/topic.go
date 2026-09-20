@@ -15,10 +15,11 @@ type TopicConfig struct {
 
 func (r *Registry) CreateTopic(topic string, numPartitions int32, replicationFactor int32) error {
 	r.mu.Lock()
-	if _, exists := r.topics[topic]; exists {
+	_, exists := r.topics[topic]
+	r.mu.Unlock()
+	if exists {
 		return fmt.Errorf("topic %s already exists", topic)
 	}
-	r.mu.Unlock()
 
 	if numPartitions <= 0 {
 		return fmt.Errorf("number of partitions must be greater than 0")
