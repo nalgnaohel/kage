@@ -1,0 +1,36 @@
+{
+  "Original": {
+    "Brokers": {
+      "1": {
+        "BrokerID": 1,
+        "Host": "localhost",
+        "Port": 9092,
+        "RaftAddr": "127.0.0.1:9094"
+      }
+    },
+    "Topics": {
+      "orders": {
+        "NumPartitions": 3,
+        "ReplicationFactor": 2,
+        "Partitions": {}
+      }
+    }
+  },
+  "Restored": {
+    "Brokers": {
+      "1": {
+        "BrokerID": 1,
+        "Host": "localhost",
+        "Port": 9092,
+        "RaftAddr": "127.0.0.1:9094"
+      }
+    },
+    "Topics": {
+      "orders": {
+        "NumPartitions": 3,
+        "ReplicationFactor": 2,
+        "Partitions": {}
+      }
+    }
+  }
+}

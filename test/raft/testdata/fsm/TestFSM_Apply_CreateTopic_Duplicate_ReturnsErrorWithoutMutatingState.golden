@@ -1,0 +1,14 @@
+{
+  "FirstErr": "",
+  "SecondErr": "raft: topic \"orders\" already exists",
+  "State": {
+    "Brokers": {},
+    "Topics": {
+      "orders": {
+        "NumPartitions": 1,
+        "ReplicationFactor": 1,
+        "Partitions": {}
+      }
+    }
+  }
+}

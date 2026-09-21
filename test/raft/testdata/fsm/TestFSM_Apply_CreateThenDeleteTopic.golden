@@ -1,0 +1,8 @@
+{
+  "CreateErr": "",
+  "DeleteErr": "",
+  "State": {
+    "Brokers": {},
+    "Topics": {}
+  }
+}

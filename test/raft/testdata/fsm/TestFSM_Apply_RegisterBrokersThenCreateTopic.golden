@@ -1,0 +1,28 @@
+{
+  "Resp1Err": "",
+  "Resp2Err": "",
+  "Resp3Err": "",
+  "State": {
+    "Brokers": {
+      "1": {
+        "BrokerID": 1,
+        "Host": "localhost",
+        "Port": 9092,
+        "RaftAddr": "127.0.0.1:9094"
+      },
+      "2": {
+        "BrokerID": 2,
+        "Host": "localhost",
+        "Port": 9093,
+        "RaftAddr": "127.0.0.1:9095"
+      }
+    },
+    "Topics": {
+      "orders": {
+        "NumPartitions": 3,
+        "ReplicationFactor": 2,
+        "Partitions": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "RespErr": "raft: unknown command type \"Bogus\"",
+  "State": {
+    "Brokers": {},
+    "Topics": {}
+  }
+}

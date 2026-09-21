@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/nalgnaohel/kage/api/kadmin"
 	"github.com/nalgnaohel/kage/api/rawdata"
 	"github.com/nalgnaohel/kage/broker"
+	"github.com/nalgnaohel/kage/raft"
 	"github.com/nalgnaohel/kage/storage"
 
 	pb "github.com/nalgnaohel/kage/api/rpc/kadmin"
@@ -23,12 +26,34 @@ func main() {
 	port := flag.Int("port", 9093, "this broker's advertised port")
 	brokerID := flag.Int("broker-id", 0, "this broker's ID")
 	clusterID := flag.String("cluster-id", "kage-cluster", "cluster identifier")
+	raftAddr := flag.String("raft-addr", ":9094", "bind address for the raft transport")
+	raftPort := flag.Int("raft-port", 9094, "this broker's advertised raft port")
+	bootstrap := flag.Bool("bootstrap", false, "bootstrap a new single-node raft cluster")
 	flag.Parse()
 
 	reg := broker.NewRegistry(*dataDir, storage.DefaultLogConfig(), *clusterID, int32(*brokerID), *host, int32(*port))
 	if err := reg.Startup(); err != nil {
 		log.Fatalf("registry startup: %v", err)
 	}
+
+	node, err := raft.NewNode(raft.Config{
+		BrokerID:      int32(*brokerID),
+		BindAddr:      *raftAddr,
+		AdvertiseAddr: fmt.Sprintf("%s:%d", *host, *raftPort),
+		DataDir:       *dataDir,
+	})
+	if err != nil {
+		log.Fatalf("raft: new node: %v", err)
+	}
+
+	if *bootstrap {
+		if err := node.Bootstrap(); err != nil {
+			log.Fatalf("raft: bootstrap: %v", err)
+		}
+	}
+
+	reconciler := raft.NewReconciler(node, reg)
+	go reconciler.Run(context.Background())
 
 	rawLn, err := net.Listen("tcp", *rawAddr)
 	if err != nil {
@@ -48,7 +73,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterKafkaAdminServer(grpcServer, kadmin.NewServer(reg))
+	pb.RegisterKafkaAdminServer(grpcServer, kadmin.NewServer(node, *clusterID))
 
 	log.Printf("kadmin gRPC server listening on %s", *grpcAddr)
 	if err := grpcServer.Serve(ln); err != nil {

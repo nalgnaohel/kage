@@ -1,0 +1,10 @@
+{
+  "Brokers": {},
+  "Topics": {
+    "orders": {
+      "NumPartitions": 2,
+      "ReplicationFactor": 1,
+      "Partitions": {}
+    }
+  }
+}
