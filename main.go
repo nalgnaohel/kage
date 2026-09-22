@@ -39,7 +39,7 @@ func main() {
 
 	advertisedRaftAddr := fmt.Sprintf("%s:%d", *host, *raftPort)
 
-	reg := broker.NewRegistry(*dataDir, storage.DefaultLogConfig(), *clusterID, int32(*brokerID), *host, int32(*port))
+	reg := broker.NewRegistry(*dataDir, storage.DefaultLogConfig())
 	if err := reg.Startup(); err != nil {
 		log.Fatalf("registry startup: %v", err)
 	}

@@ -60,7 +60,7 @@ func newTestRegistry(t *testing.T) *broker.Registry {
 	t.Helper()
 
 	dir := t.TempDir()
-	reg := broker.NewRegistry(dir, storage.DefaultLogConfig(), "test-cluster", 0, "localhost", 9093)
+	reg := broker.NewRegistry(dir, storage.DefaultLogConfig())
 	if err := reg.Startup(); err != nil {
 		t.Fatalf("Startup() failed: %v", err)
 	}

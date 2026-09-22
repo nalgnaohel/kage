@@ -46,15 +46,18 @@ func TestCreateLog_AlreadyExists_ReturnsError(t *testing.T) {
 func TestStartup_DiscoversPartitionsFromPreviousRun(t *testing.T) {
 	dir := t.TempDir()
 
-	first := broker.NewRegistry(dir, storage.DefaultLogConfig(), "c1", 0, "localhost", 9093)
+	first := broker.NewRegistry(dir, storage.DefaultLogConfig())
 	if err := first.Startup(); err != nil {
 		t.Fatalf("first Startup() failed: %v", err)
 	}
-	if err := first.CreateTopic("orders", 2, 1); err != nil {
-		t.Fatalf("CreateTopic() failed: %v", err)
+	if _, err := first.CreateLog("orders", 0); err != nil {
+		t.Fatalf("CreateLog() failed: %v", err)
+	}
+	if _, err := first.CreateLog("orders", 1); err != nil {
+		t.Fatalf("CreateLog() failed: %v", err)
 	}
 
-	second := broker.NewRegistry(dir, storage.DefaultLogConfig(), "c1", 0, "localhost", 9093)
+	second := broker.NewRegistry(dir, storage.DefaultLogConfig())
 	if err := second.Startup(); err != nil {
 		t.Fatalf("second Startup() failed: %v", err)
 	}

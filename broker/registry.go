@@ -16,33 +16,20 @@ type Registry struct {
 	mu      sync.RWMutex
 	baseDir string
 	config  storage.LogConfig
-	topics  map[string]TopicConfig
 
 	// logs: topic -> partition -> Log
 	logs map[string]map[int32]*storage.Log
 
 	// flushers: topic -> partition -> Flusher
 	flushers map[string]map[int32]*Flusher
-
-	// Immutable after construction (no lock needed to read). Single-broker
-	// only until Raft/KRaft cluster membership exists (Phase 2).
-	clusterID string
-	brokerID  int32
-	host      string
-	port      int32
 }
 
-func NewRegistry(baseDir string, cfg storage.LogConfig, clusterID string, brokerID int32, host string, port int32) *Registry {
+func NewRegistry(baseDir string, cfg storage.LogConfig) *Registry {
 	return &Registry{
-		baseDir:   baseDir,
-		config:    cfg,
-		logs:      make(map[string]map[int32]*storage.Log),
-		flushers:  make(map[string]map[int32]*Flusher),
-		topics:    make(map[string]TopicConfig),
-		clusterID: clusterID,
-		brokerID:  brokerID,
-		host:      host,
-		port:      port,
+		baseDir:  baseDir,
+		config:   cfg,
+		logs:     make(map[string]map[int32]*storage.Log),
+		flushers: make(map[string]map[int32]*Flusher),
 	}
 }
 
@@ -90,21 +77,6 @@ func (r *Registry) Startup() error {
 			r.logs[topic] = make(map[int32]*storage.Log)
 		}
 		r.logs[topic][int32(partition)] = l
-	}
-
-	// ReplicationFactor isn't persisted anywhere yet (no metadata store
-	// until Raft lands in Phase 2), so it defaults to 1 here. A topic
-	// created via CreateTopic in the same process lifetime already has a
-	// real entry in r.topics and is left untouched.
-	for topic, pMap := range r.logs {
-		if _, exists := r.topics[topic]; exists {
-			continue
-		}
-		r.topics[topic] = TopicConfig{
-			Name:              topic,
-			NumPartitions:     int32(len(pMap)),
-			ReplicationFactor: 1,
-		}
 	}
 
 	return nil

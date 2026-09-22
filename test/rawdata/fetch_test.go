@@ -99,7 +99,7 @@ func splitWireRecords(t *testing.T, payload []byte) []wireRecord {
 func newTestServer(t *testing.T) (*broker.Registry, net.Conn) {
 	t.Helper()
 
-	reg := broker.NewRegistry(t.TempDir(), storage.DefaultLogConfig(), "test-cluster", 1, "localhost", 0)
+	reg := broker.NewRegistry(t.TempDir(), storage.DefaultLogConfig())
 	if err := reg.Startup(); err != nil {
 		t.Fatalf("registry startup: %v", err)
 	}

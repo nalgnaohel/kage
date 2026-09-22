@@ -1,9 +1,0 @@
-{
-  "DeleteErr": "",
-  "GetLogOk": false,
-  "DescribeFound": false,
-  "PartitionDirsExist": [
-    false,
-    false
-  ]
-}
