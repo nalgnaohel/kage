@@ -154,7 +154,7 @@ record count.
 it directly: run the broker, issue a real Fetch, and watch `strace -f -e trace=sendfile -p <pid>` for a
 `sendfile` line — a manual, one-time check, not part of the automated suite.
 
-`cmd/manualverify/main.go` is that manual client: `go run .` the broker, then `go run ./cmd/manualverify`
+`cmd/manualverify/main.go` is that manual client: `go run ./cmd/kage` the broker, then `go run ./cmd/manualverify`
 against it — it creates a topic over the `kadmin` gRPC port, produces one record over the raw port, and
 fetches it back, printing whether the round-tripped value matches. Wrapping the broker's pid with
 `strace -f -e trace=sendfile -p <pid>` while this runs is the other half of the manual check above.

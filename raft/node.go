@@ -19,6 +19,7 @@ const (
 	snapshotRetain     = 2
 	defaultProposeWait = 10 * time.Second
 	leaderPollInterval = 50 * time.Millisecond
+	addVoterTimeout    = 10 * time.Second
 )
 
 type Config struct {
@@ -140,6 +141,48 @@ func (n *Node) Propose(cmd Command, timeout time.Duration) (interface{}, error) 
 		return nil, respErr
 	}
 	return resp, nil
+}
+
+type JoinRequest struct {
+	BrokerID int32
+	Host     string
+	Port     int32
+	RaftAddr string
+}
+
+// Join adds req as a voter and registers it in cluster metadata. Only the
+// leader can do this; a non-leader returns ErrNotLeader so the caller (an
+// api/kadmin RPC handler) can translate it into the same redirect shape
+// CreateTopic/DeleteTopic already use.
+func (n *Node) Join(req JoinRequest) error {
+	if n.raft.State() != hraft.Leader {
+		return n.notLeaderErr()
+	}
+
+	addFuture := n.raft.AddVoter(
+		hraft.ServerID(strconv.Itoa(int(req.BrokerID))),
+		hraft.ServerAddress(req.RaftAddr),
+		0,
+		addVoterTimeout,
+	)
+	if err := addFuture.Error(); err != nil {
+		return fmt.Errorf("raft: add voter: %w", err)
+	}
+
+	cmd, err := NewRegisterBrokerCommand(RegisterBrokerCommand{
+		BrokerID: req.BrokerID,
+		Host:     req.Host,
+		Port:     req.Port,
+		RaftAddr: req.RaftAddr,
+	})
+	if err != nil {
+		return err
+	}
+
+	if _, err := n.Propose(cmd, defaultProposeWait); err != nil {
+		return fmt.Errorf("raft: register joined broker: %w", err)
+	}
+	return nil
 }
 
 func (n *Node) notLeaderErr() error {

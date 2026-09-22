@@ -24,6 +24,7 @@ const (
 	KafkaAdmin_ListTopics_FullMethodName     = "/kage.kadmin.KafkaAdmin/ListTopics"
 	KafkaAdmin_DescribeTopic_FullMethodName  = "/kage.kadmin.KafkaAdmin/DescribeTopic"
 	KafkaAdmin_GetClusterInfo_FullMethodName = "/kage.kadmin.KafkaAdmin/GetClusterInfo"
+	KafkaAdmin_JoinCluster_FullMethodName    = "/kage.kadmin.KafkaAdmin/JoinCluster"
 )
 
 // KafkaAdminClient is the client API for KafkaAdmin service.
@@ -36,6 +37,7 @@ type KafkaAdminClient interface {
 	DescribeTopic(ctx context.Context, in *DescribeTopicRequest, opts ...grpc.CallOption) (*DescribeTopicResponse, error)
 	// Cluster Management
 	GetClusterInfo(ctx context.Context, in *GetClusterInfoRequest, opts ...grpc.CallOption) (*GetClusterInfoResponse, error)
+	JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error)
 }
 
 type kafkaAdminClient struct {
@@ -96,6 +98,16 @@ func (c *kafkaAdminClient) GetClusterInfo(ctx context.Context, in *GetClusterInf
 	return out, nil
 }
 
+func (c *kafkaAdminClient) JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinClusterResponse)
+	err := c.cc.Invoke(ctx, KafkaAdmin_JoinCluster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KafkaAdminServer is the server API for KafkaAdmin service.
 // All implementations must embed UnimplementedKafkaAdminServer
 // for forward compatibility.
@@ -106,6 +118,7 @@ type KafkaAdminServer interface {
 	DescribeTopic(context.Context, *DescribeTopicRequest) (*DescribeTopicResponse, error)
 	// Cluster Management
 	GetClusterInfo(context.Context, *GetClusterInfoRequest) (*GetClusterInfoResponse, error)
+	JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error)
 	mustEmbedUnimplementedKafkaAdminServer()
 }
 
@@ -130,6 +143,9 @@ func (UnimplementedKafkaAdminServer) DescribeTopic(context.Context, *DescribeTop
 }
 func (UnimplementedKafkaAdminServer) GetClusterInfo(context.Context, *GetClusterInfoRequest) (*GetClusterInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetClusterInfo not implemented")
+}
+func (UnimplementedKafkaAdminServer) JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinCluster not implemented")
 }
 func (UnimplementedKafkaAdminServer) mustEmbedUnimplementedKafkaAdminServer() {}
 func (UnimplementedKafkaAdminServer) testEmbeddedByValue()                    {}
@@ -242,6 +258,24 @@ func _KafkaAdmin_GetClusterInfo_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KafkaAdmin_JoinCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinClusterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KafkaAdminServer).JoinCluster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KafkaAdmin_JoinCluster_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KafkaAdminServer).JoinCluster(ctx, req.(*JoinClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // KafkaAdmin_ServiceDesc is the grpc.ServiceDesc for KafkaAdmin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -268,6 +302,10 @@ var KafkaAdmin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetClusterInfo",
 			Handler:    _KafkaAdmin_GetClusterInfo_Handler,
+		},
+		{
+			MethodName: "JoinCluster",
+			Handler:    _KafkaAdmin_JoinCluster_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

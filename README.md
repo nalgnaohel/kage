@@ -7,7 +7,7 @@ Quietly but (hopefully) effectively, Kage is an attempt to build a mesage queue 
 Build the broker binary:
 
 ```
-go build -o kage .
+go build -o kage ./cmd/kage
 ```
 
 Kage is being built in phases (see `CLAUDE.md`). As of Phase 2 Round A, running it means starting one

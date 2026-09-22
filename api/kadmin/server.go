@@ -118,3 +118,16 @@ func (s *Server) GetClusterInfo(_ context.Context, _ *pb.GetClusterInfoRequest) 
 
 	return &pb.GetClusterInfoResponse{ClusterId: s.clusterID, Brokers: brokers}, nil
 }
+
+func (s *Server) JoinCluster(_ context.Context, req *pb.JoinClusterRequest) (*pb.JoinClusterResponse, error) {
+	err := s.node.Join(raft.JoinRequest{
+		BrokerID: req.GetBrokerId(),
+		Host:     req.GetHost(),
+		Port:     req.GetPort(),
+		RaftAddr: req.GetRaftAddr(),
+	})
+	if err != nil {
+		return &pb.JoinClusterResponse{Success: false, Message: s.proposeErrMessage(err)}, nil
+	}
+	return &pb.JoinClusterResponse{Success: true}, nil
+}

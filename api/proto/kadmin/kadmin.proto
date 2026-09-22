@@ -12,6 +12,7 @@ service KafkaAdmin {
 
   // Cluster Management
   rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse);
+  rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse);
 }
 
 message CreateTopicRequest {
@@ -69,4 +70,16 @@ message BrokerInfo {
   int32 broker_id = 1;
   string host = 2;
   int32 port = 3;
+}
+
+message JoinClusterRequest {
+  int32 broker_id = 1;
+  string host = 2;
+  int32 port = 3;
+  string raft_addr = 4;
+}
+
+message JoinClusterResponse {
+  bool success = 1;
+  string message = 2;
 }

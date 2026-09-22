@@ -637,6 +637,126 @@ func (x *BrokerInfo) GetPort() int32 {
 	return 0
 }
 
+type JoinClusterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	RaftAddr      string                 `protobuf:"bytes,4,opt,name=raft_addr,json=raftAddr,proto3" json:"raft_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinClusterRequest) Reset() {
+	*x = JoinClusterRequest{}
+	mi := &file_kadmin_kadmin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinClusterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinClusterRequest) ProtoMessage() {}
+
+func (x *JoinClusterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kadmin_kadmin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinClusterRequest.ProtoReflect.Descriptor instead.
+func (*JoinClusterRequest) Descriptor() ([]byte, []int) {
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *JoinClusterRequest) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *JoinClusterRequest) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *JoinClusterRequest) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *JoinClusterRequest) GetRaftAddr() string {
+	if x != nil {
+		return x.RaftAddr
+	}
+	return ""
+}
+
+type JoinClusterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinClusterResponse) Reset() {
+	*x = JoinClusterResponse{}
+	mi := &file_kadmin_kadmin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinClusterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinClusterResponse) ProtoMessage() {}
+
+func (x *JoinClusterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kadmin_kadmin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinClusterResponse.ProtoReflect.Descriptor instead.
+func (*JoinClusterResponse) Descriptor() ([]byte, []int) {
+	return file_kadmin_kadmin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *JoinClusterResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *JoinClusterResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_kadmin_kadmin_proto protoreflect.FileDescriptor
 
 const file_kadmin_kadmin_proto_rawDesc = "" +
@@ -687,7 +807,15 @@ const file_kadmin_kadmin_proto_rawDesc = "" +
 	"BrokerInfo\x12\x1b\n" +
 	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
-	"\x04port\x18\x03 \x01(\x05R\x04port2\xb2\x03\n" +
+	"\x04port\x18\x03 \x01(\x05R\x04port\"v\n" +
+	"\x12JoinClusterRequest\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\x05R\x04port\x12\x1b\n" +
+	"\traft_addr\x18\x04 \x01(\tR\braftAddr\"I\n" +
+	"\x13JoinClusterResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\x84\x04\n" +
 	"\n" +
 	"KafkaAdmin\x12P\n" +
 	"\vCreateTopic\x12\x1f.kage.kadmin.CreateTopicRequest\x1a .kage.kadmin.CreateTopicResponse\x12P\n" +
@@ -695,7 +823,8 @@ const file_kadmin_kadmin_proto_rawDesc = "" +
 	"\n" +
 	"ListTopics\x12\x1e.kage.kadmin.ListTopicsRequest\x1a\x1f.kage.kadmin.ListTopicsResponse\x12V\n" +
 	"\rDescribeTopic\x12!.kage.kadmin.DescribeTopicRequest\x1a\".kage.kadmin.DescribeTopicResponse\x12Y\n" +
-	"\x0eGetClusterInfo\x12\".kage.kadmin.GetClusterInfoRequest\x1a#.kage.kadmin.GetClusterInfoResponseB\x11Z\x0fkage/rpc/kadminb\x06proto3"
+	"\x0eGetClusterInfo\x12\".kage.kadmin.GetClusterInfoRequest\x1a#.kage.kadmin.GetClusterInfoResponse\x12P\n" +
+	"\vJoinCluster\x12\x1f.kage.kadmin.JoinClusterRequest\x1a .kage.kadmin.JoinClusterResponseB\x11Z\x0fkage/rpc/kadminb\x06proto3"
 
 var (
 	file_kadmin_kadmin_proto_rawDescOnce sync.Once
@@ -709,7 +838,7 @@ func file_kadmin_kadmin_proto_rawDescGZIP() []byte {
 	return file_kadmin_kadmin_proto_rawDescData
 }
 
-var file_kadmin_kadmin_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_kadmin_kadmin_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_kadmin_kadmin_proto_goTypes = []any{
 	(*CreateTopicRequest)(nil),     // 0: kage.kadmin.CreateTopicRequest
 	(*CreateTopicResponse)(nil),    // 1: kage.kadmin.CreateTopicResponse
@@ -723,10 +852,12 @@ var file_kadmin_kadmin_proto_goTypes = []any{
 	(*GetClusterInfoRequest)(nil),  // 9: kage.kadmin.GetClusterInfoRequest
 	(*GetClusterInfoResponse)(nil), // 10: kage.kadmin.GetClusterInfoResponse
 	(*BrokerInfo)(nil),             // 11: kage.kadmin.BrokerInfo
-	nil,                            // 12: kage.kadmin.DescribeTopicResponse.PartitionsEntry
+	(*JoinClusterRequest)(nil),     // 12: kage.kadmin.JoinClusterRequest
+	(*JoinClusterResponse)(nil),    // 13: kage.kadmin.JoinClusterResponse
+	nil,                            // 14: kage.kadmin.DescribeTopicResponse.PartitionsEntry
 }
 var file_kadmin_kadmin_proto_depIdxs = []int32{
-	12, // 0: kage.kadmin.DescribeTopicResponse.partitions:type_name -> kage.kadmin.DescribeTopicResponse.PartitionsEntry
+	14, // 0: kage.kadmin.DescribeTopicResponse.partitions:type_name -> kage.kadmin.DescribeTopicResponse.PartitionsEntry
 	11, // 1: kage.kadmin.GetClusterInfoResponse.brokers:type_name -> kage.kadmin.BrokerInfo
 	8,  // 2: kage.kadmin.DescribeTopicResponse.PartitionsEntry.value:type_name -> kage.kadmin.PartitionInfo
 	0,  // 3: kage.kadmin.KafkaAdmin.CreateTopic:input_type -> kage.kadmin.CreateTopicRequest
@@ -734,13 +865,15 @@ var file_kadmin_kadmin_proto_depIdxs = []int32{
 	4,  // 5: kage.kadmin.KafkaAdmin.ListTopics:input_type -> kage.kadmin.ListTopicsRequest
 	6,  // 6: kage.kadmin.KafkaAdmin.DescribeTopic:input_type -> kage.kadmin.DescribeTopicRequest
 	9,  // 7: kage.kadmin.KafkaAdmin.GetClusterInfo:input_type -> kage.kadmin.GetClusterInfoRequest
-	1,  // 8: kage.kadmin.KafkaAdmin.CreateTopic:output_type -> kage.kadmin.CreateTopicResponse
-	3,  // 9: kage.kadmin.KafkaAdmin.DeleteTopic:output_type -> kage.kadmin.DeleteTopicResponse
-	5,  // 10: kage.kadmin.KafkaAdmin.ListTopics:output_type -> kage.kadmin.ListTopicsResponse
-	7,  // 11: kage.kadmin.KafkaAdmin.DescribeTopic:output_type -> kage.kadmin.DescribeTopicResponse
-	10, // 12: kage.kadmin.KafkaAdmin.GetClusterInfo:output_type -> kage.kadmin.GetClusterInfoResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
+	12, // 8: kage.kadmin.KafkaAdmin.JoinCluster:input_type -> kage.kadmin.JoinClusterRequest
+	1,  // 9: kage.kadmin.KafkaAdmin.CreateTopic:output_type -> kage.kadmin.CreateTopicResponse
+	3,  // 10: kage.kadmin.KafkaAdmin.DeleteTopic:output_type -> kage.kadmin.DeleteTopicResponse
+	5,  // 11: kage.kadmin.KafkaAdmin.ListTopics:output_type -> kage.kadmin.ListTopicsResponse
+	7,  // 12: kage.kadmin.KafkaAdmin.DescribeTopic:output_type -> kage.kadmin.DescribeTopicResponse
+	10, // 13: kage.kadmin.KafkaAdmin.GetClusterInfo:output_type -> kage.kadmin.GetClusterInfoResponse
+	13, // 14: kage.kadmin.KafkaAdmin.JoinCluster:output_type -> kage.kadmin.JoinClusterResponse
+	9,  // [9:15] is the sub-list for method output_type
+	3,  // [3:9] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -757,7 +890,7 @@ func file_kadmin_kadmin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kadmin_kadmin_proto_rawDesc), len(file_kadmin_kadmin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
