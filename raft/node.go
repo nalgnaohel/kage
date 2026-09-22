@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ const (
 	transportTimeout   = 10 * time.Second
 	snapshotRetain     = 2
 	defaultProposeWait = 10 * time.Second
+	leaderPollInterval = 50 * time.Millisecond
 )
 
 type Config struct {
@@ -95,7 +97,23 @@ func (n *Node) Bootstrap() error {
 			},
 		},
 	}
-	return n.raft.BootstrapCluster(config).Error()
+	if err := n.raft.BootstrapCluster(config).Error(); err != nil && !errors.Is(err, hraft.ErrCantBootstrap) {
+		return err
+	}
+	return nil
+}
+
+func (n *Node) WaitForLeader(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		if n.raft.State() == hraft.Leader {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("raft: broker %d did not become leader within %s", n.brokerID, timeout)
+		}
+		time.Sleep(leaderPollInterval)
+	}
 }
 
 func (n *Node) Propose(cmd Command, timeout time.Duration) (interface{}, error) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -16,6 +17,11 @@ import (
 	"github.com/nalgnaohel/kage/storage"
 
 	pb "github.com/nalgnaohel/kage/api/rpc/kadmin"
+)
+
+const (
+	leaderWaitTimeout = 15 * time.Second
+	proposeTimeout    = 10 * time.Second
 )
 
 func main() {
@@ -31,6 +37,8 @@ func main() {
 	bootstrap := flag.Bool("bootstrap", false, "bootstrap a new single-node raft cluster")
 	flag.Parse()
 
+	advertisedRaftAddr := fmt.Sprintf("%s:%d", *host, *raftPort)
+
 	reg := broker.NewRegistry(*dataDir, storage.DefaultLogConfig(), *clusterID, int32(*brokerID), *host, int32(*port))
 	if err := reg.Startup(); err != nil {
 		log.Fatalf("registry startup: %v", err)
@@ -39,7 +47,7 @@ func main() {
 	node, err := raft.NewNode(raft.Config{
 		BrokerID:      int32(*brokerID),
 		BindAddr:      *raftAddr,
-		AdvertiseAddr: fmt.Sprintf("%s:%d", *host, *raftPort),
+		AdvertiseAddr: advertisedRaftAddr,
 		DataDir:       *dataDir,
 	})
 	if err != nil {
@@ -50,6 +58,12 @@ func main() {
 		if err := node.Bootstrap(); err != nil {
 			log.Fatalf("raft: bootstrap: %v", err)
 		}
+		go registerSelf(node, raft.RegisterBrokerCommand{
+			BrokerID: int32(*brokerID),
+			Host:     *host,
+			Port:     int32(*port),
+			RaftAddr: advertisedRaftAddr,
+		})
 	}
 
 	reconciler := raft.NewReconciler(node, reg)
@@ -79,4 +93,24 @@ func main() {
 	if err := grpcServer.Serve(ln); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
+}
+
+func registerSelf(node *raft.Node, info raft.RegisterBrokerCommand) {
+	if err := node.WaitForLeader(leaderWaitTimeout); err != nil {
+		log.Printf("raft: skipping self-registration: %v", err)
+		return
+	}
+
+	cmd, err := raft.NewRegisterBrokerCommand(info)
+	if err != nil {
+		log.Printf("raft: self-registration failed: %v", err)
+		return
+	}
+
+	if _, err := node.Propose(cmd, proposeTimeout); err != nil {
+		log.Printf("raft: self-registration failed: %v", err)
+		return
+	}
+
+	log.Printf("raft: registered broker %d (%s:%d, raft %s) in cluster metadata", info.BrokerID, info.Host, info.Port, info.RaftAddr)
 }
