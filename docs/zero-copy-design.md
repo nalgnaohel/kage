@@ -9,11 +9,9 @@ Status: both Round 1 (Fetch) and Round 2 (Produce) are implemented and covered b
 `data.proto` no longer has `Fetch` or `Produce` — `GetMetadata`/`CommitOffset`/`GetOffset`/
 `ListOffsets` are all that's left on gRPC.
 
-TODO (manual verification, not yet done):
-- `strace -f -e trace=sendfile -p <pid>` against a running broker during a real Fetch, to directly
-  confirm the `sendfile(2)` syscall fires.
-- End-to-end interop check against a real running broker (not the in-process test harness): produce a
-  record via the raw TCP path, then fetch it back via the same path, and confirm the bytes match.
+Manual verification: **done** — see "Run 2026-09-20" in the Benchmark section below. `strace` confirmed
+a real `sendfile(2)` syscall firing during a Fetch, and a produce-then-fetch round trip over a real
+running broker matched byte-for-byte.
 
 ## Why this shape
 
