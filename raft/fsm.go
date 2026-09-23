@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 
 	hraft "github.com/hashicorp/raft"
@@ -148,9 +149,33 @@ func (f *FSM) applyCreateTopic(cmd Command) error {
 	f.state.Topics[payload.Topic] = TopicMeta{
 		NumPartitions:     payload.NumPartitions,
 		ReplicationFactor: payload.ReplicationFactor,
-		Partitions:        make(map[int32]PartitionAssignment),
+		Partitions:        f.placePartitions(payload.NumPartitions, payload.ReplicationFactor),
 	}
 	return nil
+}
+
+func (f *FSM) placePartitions(numPartitions, replicationFactor int32) map[int32]PartitionAssignment {
+	partitions := make(map[int32]PartitionAssignment, numPartitions)
+
+	sorted := make([]int32, 0, len(f.state.Brokers))
+	for id := range f.state.Brokers {
+		sorted = append(sorted, id)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+
+	replicaCount := int(replicationFactor)
+	if len(sorted) < replicaCount {
+		replicaCount = len(sorted)
+	}
+
+	for p := int32(0); p < numPartitions; p++ {
+		replicas := make([]int32, replicaCount)
+		for i := 0; i < replicaCount; i++ {
+			replicas[i] = sorted[(int(p)+i)%len(sorted)]
+		}
+		partitions[p] = PartitionAssignment{Replicas: replicas}
+	}
+	return partitions
 }
 
 func (f *FSM) applyDeleteTopic(cmd Command) error {

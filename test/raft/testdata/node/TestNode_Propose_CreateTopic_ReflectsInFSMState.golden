@@ -4,7 +4,14 @@
     "orders": {
       "NumPartitions": 2,
       "ReplicationFactor": 1,
-      "Partitions": {}
+      "Partitions": {
+        "0": {
+          "Replicas": []
+        },
+        "1": {
+          "Replicas": []
+        }
+      }
     }
   }
 }

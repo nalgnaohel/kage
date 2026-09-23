@@ -7,10 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Kage — a Kafka-inspired distributed message queue, built **KRaft-style**: Raft owns metadata/control
 plane, ISR (in-sync replicas) owns the data plane, deliberately kept separate so consensus never sits
 on the hot write path. The project is being built in three phases (see the "Project phase" section
-below); the repo today is Phase 1 complete + Phase 2 in progress: the storage engine, a raw-TCP
+below); the repo today is Phase 1 complete + Phase 2 complete: the storage engine, a raw-TCP
 data-plane server (`api/rawdata`) serving both `Fetch` (zero-copy `sendfile(2)`) and `Produce`, and a
 `hashicorp/raft`-backed metadata control plane (package `raft`) that a multi-broker cluster actually
-joins and replicates through — verified against two real broker processes, not just unit tests.
+joins, round-robin-assigns partitions across, and replicates through — verified against three real
+broker processes (not just unit tests), including redirect-to-leader and the reconciler creating
+partition directories only on the brokers actually named in each partition's replica set.
 `data.proto` keeps only `GetMetadata`/`CommitOffset`/`GetOffset`/`ListOffsets` now that `Fetch`/`Produce`
 moved to the raw path.
 
@@ -30,6 +32,8 @@ go test ./test/broker/... -update      # regenerate golden fixtures after an int
 go test ./test/rawdata/... -v          # raw TCP data-plane integration tests (Fetch + Produce)
 go test ./test/bench/... -bench=. -benchmem   # zero-copy vs legacy-decode Fetch benchmark
 go test ./test/raft/... -v             # FSM unit tests + single-node Node bootstrap/propose tests
+go test ./test/raft/... -run TestCluster -v -race   # 3-node in-process raft convergence test
+go test ./test/kadmin/... -v           # 3-broker real-gRPC redirect-to-leader + assignment test
 ```
 
 Regenerating gRPC code from `.proto` sources (`api/rpc/<plane>/*.pb.go` mirrors
@@ -142,10 +146,12 @@ never imports `raft`, keeping storage/local-disk code independently testable.
   type-switches once) for `RegisterBroker`/`CreateTopic`/`DeleteTopic`. Encoded as plain JSON (not
   gob/protobuf — these commands never cross their own network boundary, they ride inside
   `hashicorp/raft`'s own msgpack-encoded transport). `Snapshot`/`Restore` JSON-marshal/unmarshal the
-  whole `State` (small enough that incremental snapshots aren't needed). **Known gap**:
-  `applyCreateTopic` still leaves `TopicMeta.Partitions` empty — round-robin replica placement across
-  brokers isn't implemented yet (`docs/raft-plan.md` Round B step 15), so `DescribeTopic` reports zero
-  partitions today.
+  whole `State` (small enough that incremental snapshots aren't needed). `applyCreateTopic` assigns
+  `TopicMeta.Partitions` via `placePartitions`: round-robin over the sorted known broker IDs
+  (`replicas[i] = sorted[(partition+i) % len(sorted)]`, replica count `min(replicationFactor,
+  len(sorted))`, leader = `replicas[0]`) — a deliberate simplification of Kafka's real rack-aware
+  assignment, not silently punted. If no brokers are registered yet, partitions get an empty replica
+  set (nothing to place onto).
 - **`node.go`** — `Node` wraps `*hraft.Raft`. `Propose(cmd, timeout)` checks leadership first; a
   non-leader gets a typed `*ErrNotLeader{LeaderID, LeaderAddr}` immediately — **redirect, don't
   proxy**, the caller (client or `api/kadmin`) is expected to cache the leader address and retry
@@ -163,18 +169,29 @@ never imports `raft`, keeping storage/local-disk code independently testable.
   replays during snapshot `Restore`, must stay a pure fast deterministic function, and runs on every
   node regardless of whether that node owns the partition — local disk I/O errors must never affect
   consensus.
-- **Multi-broker join**: verified against two real `cmd/kage` processes on loopback — broker 2's
-  `-join-addr` flow logs `raft: joined cluster via <addr>`, and `GetClusterInfo` queried against
-  *either* broker returns both, confirming real replication (not a one-sided view). `CreateTopic`
-  issued directly at the follower correctly redirects (`"not leader; leader is broker 1 at ..."`).
-- **Not yet done** (`docs/raft-plan.md` Round B/C): round-robin partition placement (step 15), a
-  3-node convergence test (`test/raft/cluster_test.go`, step 16), and redirect-to-leader plus
-  reconciler verification across a real 3-process cluster (Round C, steps 17-21 — includes the
-  follow-up to this very file once that round lands).
+- **Multi-broker join**: verified against three real `cmd/kage` processes on loopback (`-bootstrap`
+  broker 1, `-join-addr` brokers 2 and 3) — each joiner's log shows `raft: joined cluster via <addr>`,
+  and `GetClusterInfo` queried against *any* of the three returns all three, confirming real
+  replication (not a one-sided view). `CreateTopic` issued directly at a non-leader broker correctly
+  redirects (`"not leader; leader is broker 1 at ..."`); retrying against the redirected address
+  succeeds, and the resulting `TopicMeta.Partitions` — round-robin-assigned by `placePartitions` —
+  matches across all three brokers' `DescribeTopic` responses. The reconciler was confirmed to create
+  `Registry.CreateLog` partition directories (`<topic>-<partition>/`) only on the brokers actually
+  named in that partition's `Replicas`, by inspecting each process's `-data-dir` on disk. `Fetch`/
+  `Produce` against `api/rawdata` on the correct broker for a partition still worked unchanged,
+  confirming the data plane genuinely wasn't touched by any of Phase 2's work.
 - **Tests**: `test/raft/fsm_test.go` (no network — `Apply` sequences, snapshot/restore round-trip,
-  golden JSON state) and `test/raft/node_test.go` (single-node `Node` over a real loopback raft
+  golden JSON state), `test/raft/node_test.go` (single-node `Node` over a real loopback raft
   transport: bootstrap, wait for leadership, propose, assert FSM state; plus a not-leader `Propose`
-  case).
+  case), `test/raft/cluster_test.go` (3 `Node`s over real loopback TCP raft transports in one process,
+  `Bootstrap` + `Join` via direct `Node.Join` calls — no gRPC, keeps it fast — then `Propose` against
+  whichever node is leader and poll for all 3 FSMs to converge via `reflect.DeepEqual`, not a golden
+  file, since raft election/replication timing is non-deterministic across runs), and
+  `test/kadmin/cluster_test.go` (3 in-process `kadmin.Server` + `raft.Node` pairs behind real gRPC
+  servers on `127.0.0.1:0` — the one test that goes through the actual client/server boundary — issuing
+  `CreateTopic` against a deliberately-chosen non-leader, following the redirect its `message` field
+  carries, retrying against the resolved leader, then `DescribeTopic` from a third broker to assert
+  `Replicas`/`Leader`/`Isr` match the FSM's round-robin decision).
 
 ### `api`: gRPC control plane + raw-TCP data plane
 
@@ -231,12 +248,13 @@ bytes, only topic/broker metadata.
   (`api/rawdata`) serving both `Fetch` and `Produce`. `docs/zero-copy-plan.md`/`docs/zero-copy-design.md`
   document why: gRPC/HTTP2 framing + TLS both rule out kernel `sendfile(2)`, so `Fetch`/`Produce` moved
   off gRPC entirely; `data.proto` no longer carries either RPC.
-- **Phase 2 (Raft metadata control plane): Round A + Round B mostly done, per `docs/raft-plan.md`.**
-  Round A (single-node FSM, bootstrap, `CreateTopic`/`ListTopics` through Raft) and Round B (broker
-  membership + multi-node `JoinCluster`, steps 11-14) are implemented and verified against two real
-  `cmd/kage` processes replicating over loopback raft — not just unit tests. Still open: round-robin
-  partition placement (step 15 — `TopicMeta.Partitions` is populated but always empty right now) and a
-  3-node convergence test (step 16), then Round C (redirect-to-leader across a real 3-process cluster,
-  reconciler verification, `test/kadmin/`).
+- **Phase 2 (Raft metadata control plane): done, per `docs/raft-plan.md`.** Round A (single-node FSM,
+  bootstrap, `CreateTopic`/`ListTopics` through Raft), Round B (broker membership + multi-node
+  `JoinCluster` + round-robin partition placement, steps 11-16), and Round C (redirect-to-leader plus
+  reconciler verification across a real 3-process cluster, `test/kadmin/`, steps 17-21) are all
+  implemented and verified against three real `cmd/kage` processes replicating over loopback raft — not
+  just unit tests. New flags: `-raft-addr`/`-raft-port` (this broker's raft transport bind/advertise
+  address), `-bootstrap` (bootstrap a fresh single-node raft cluster), `-join-addr` (an existing
+  broker's kadmin gRPC address to join an existing raft cluster through).
 - **Phase 3 (ISR data replication): not started.** Design-only for now — high-watermark and ISR flow are
   not implemented; `PartitionInfo`'s `isr` field is currently just a copy of `replicas`.

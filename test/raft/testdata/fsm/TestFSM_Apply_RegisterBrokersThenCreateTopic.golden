@@ -21,7 +21,26 @@
       "orders": {
         "NumPartitions": 3,
         "ReplicationFactor": 2,
-        "Partitions": {}
+        "Partitions": {
+          "0": {
+            "Replicas": [
+              1,
+              2
+            ]
+          },
+          "1": {
+            "Replicas": [
+              2,
+              1
+            ]
+          },
+          "2": {
+            "Replicas": [
+              1,
+              2
+            ]
+          }
+        }
       }
     }
   }
