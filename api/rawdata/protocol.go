@@ -34,6 +34,7 @@ const (
 	partitionWidth    = 4
 	fetchOffsetWidth  = 8
 	maxBytesWidth     = 4
+	replicaIDWidth    = 4
 	requiredAcksWidth = 1
 	valueLenWidth     = 4
 )
@@ -63,6 +64,15 @@ type FetchRequest struct {
 	Partition   int32
 	FetchOffset uint64
 	MaxBytes    int32
+	ReplicaID   int32
+}
+
+type FetchResponseHeader struct {
+	CorrelationID uint32
+	Code          ErrorCode
+	HighWatermark uint64
+	NextOffset    uint64
+	PayloadLen    uint32
 }
 
 type ProduceRequest struct {
@@ -103,7 +113,7 @@ func DecodeFetchRequest(body []byte) (FetchRequest, error) {
 	}
 	topicLen := int(enc.Uint16(body[0:topicLenWidth]))
 	pos := topicLenWidth
-	if len(body) < pos+topicLen+partitionWidth+fetchOffsetWidth+maxBytesWidth {
+	if len(body) < pos+topicLen+partitionWidth+fetchOffsetWidth+maxBytesWidth+replicaIDWidth {
 		return FetchRequest{}, fmt.Errorf("rawdata: fetch request truncated")
 	}
 
@@ -114,13 +124,59 @@ func DecodeFetchRequest(body []byte) (FetchRequest, error) {
 	fetchOffset := enc.Uint64(body[pos : pos+fetchOffsetWidth])
 	pos += fetchOffsetWidth
 	maxBytes := int32(enc.Uint32(body[pos : pos+maxBytesWidth]))
+	pos += maxBytesWidth
+	replicaID := int32(enc.Uint32(body[pos : pos+replicaIDWidth]))
 
 	return FetchRequest{
 		Topic:       topic,
 		Partition:   partition,
 		FetchOffset: fetchOffset,
 		MaxBytes:    maxBytes,
+		ReplicaID:   replicaID,
 	}, nil
+}
+
+func EncodeFetchRequest(w io.Writer, correlationID uint32, req FetchRequest) error {
+	body := make([]byte, 0, topicLenWidth+len(req.Topic)+partitionWidth+fetchOffsetWidth+maxBytesWidth+replicaIDWidth)
+
+	topicLenBuf := make([]byte, topicLenWidth)
+	enc.PutUint16(topicLenBuf, uint16(len(req.Topic)))
+	body = append(body, topicLenBuf...)
+	body = append(body, []byte(req.Topic)...)
+
+	partitionBuf := make([]byte, partitionWidth)
+	enc.PutUint32(partitionBuf, uint32(req.Partition))
+	body = append(body, partitionBuf...)
+
+	fetchOffsetBuf := make([]byte, fetchOffsetWidth)
+	enc.PutUint64(fetchOffsetBuf, req.FetchOffset)
+	body = append(body, fetchOffsetBuf...)
+
+	maxBytesBuf := make([]byte, maxBytesWidth)
+	enc.PutUint32(maxBytesBuf, uint32(req.MaxBytes))
+	body = append(body, maxBytesBuf...)
+
+	replicaIDBuf := make([]byte, replicaIDWidth)
+	enc.PutUint32(replicaIDBuf, uint32(req.ReplicaID))
+	body = append(body, replicaIDBuf...)
+
+	frame := make([]byte, requestHeaderSize+len(body))
+	pos := 0
+	enc.PutUint16(frame[pos:pos+apiKeyWidth], ApiFetch)
+	pos += apiKeyWidth
+	enc.PutUint16(frame[pos:pos+apiVersionWidth], 0)
+	pos += apiVersionWidth
+	enc.PutUint32(frame[pos:pos+correlationIDWidth], correlationID)
+	copy(frame[requestHeaderSize:], body)
+
+	lenBuf := make([]byte, frameLengthWidth)
+	enc.PutUint32(lenBuf, uint32(len(frame)))
+
+	if _, err := w.Write(lenBuf); err != nil {
+		return err
+	}
+	_, err := w.Write(frame)
+	return err
 }
 
 func DecodeProduceRequest(body []byte) (ProduceRequest, error) {
@@ -172,6 +228,41 @@ func EncodeFetchResponseHeader(w io.Writer, correlationID uint32, code ErrorCode
 
 	_, err := w.Write(buf)
 	return err
+}
+
+func DecodeFetchResponseHeader(r io.Reader) (FetchResponseHeader, error) {
+	var lenBuf [frameLengthWidth]byte
+	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
+		return FetchResponseHeader{}, err
+	}
+	totalLength := enc.Uint32(lenBuf[:])
+	if totalLength < uint32(responseHeaderSize) {
+		return FetchResponseHeader{}, fmt.Errorf("rawdata: fetch response frame too short (%d bytes)", totalLength)
+	}
+
+	buf := make([]byte, responseHeaderSize)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return FetchResponseHeader{}, err
+	}
+
+	pos := 0
+	correlationID := enc.Uint32(buf[pos : pos+correlationIDWidth])
+	pos += correlationIDWidth
+	code := ErrorCode(enc.Uint16(buf[pos : pos+errorCodeWidth]))
+	pos += errorCodeWidth
+	hw := enc.Uint64(buf[pos : pos+highWatermarkWidth])
+	pos += highWatermarkWidth
+	nextOffset := enc.Uint64(buf[pos : pos+nextOffsetWidth])
+	pos += nextOffsetWidth
+	payloadLen := enc.Uint32(buf[pos : pos+payloadLenWidth])
+
+	return FetchResponseHeader{
+		CorrelationID: correlationID,
+		Code:          code,
+		HighWatermark: hw,
+		NextOffset:    nextOffset,
+		PayloadLen:    payloadLen,
+	}, nil
 }
 
 func EncodeProduceResponse(w io.Writer, correlationID uint32, code ErrorCode, baseOffset uint64) error {

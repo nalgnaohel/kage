@@ -29,7 +29,7 @@ func recordSize(value []byte) int {
 }
 
 func encodeFetchRequest(correlationID uint32, topic string, partition int32, fetchOffset uint64, maxBytes int32) []byte {
-	body := make([]byte, 0, 2+len(topic)+4+8+4)
+	body := make([]byte, 0, 2+len(topic)+4+8+4+4)
 
 	topicLen := make([]byte, 2)
 	binary.BigEndian.PutUint16(topicLen, uint16(len(topic)))
@@ -45,6 +45,10 @@ func encodeFetchRequest(correlationID uint32, topic string, partition int32, fet
 	body = append(body, buf8...)
 
 	binary.BigEndian.PutUint32(buf4, uint32(maxBytes))
+	body = append(body, buf4...)
+
+	replicaID := uint32(0)
+	binary.BigEndian.PutUint32(buf4, replicaID)
 	body = append(body, buf4...)
 
 	header := make([]byte, 8)

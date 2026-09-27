@@ -100,7 +100,7 @@ func produce(conn net.Conn, topic string, partition int32, value []byte) (uint64
 }
 
 func fetch(conn net.Conn, topic string, partition int32, offset uint64, maxBytes int32) ([]byte, uint64, error) {
-	body := make([]byte, 0, 2+len(topic)+4+8+4)
+	body := make([]byte, 0, 2+len(topic)+4+8+4+4)
 	topicLen := make([]byte, 2)
 	binary.BigEndian.PutUint16(topicLen, uint16(len(topic)))
 	body = append(body, topicLen...)
@@ -115,6 +115,9 @@ func fetch(conn net.Conn, topic string, partition int32, offset uint64, maxBytes
 	body = append(body, buf8...)
 
 	binary.BigEndian.PutUint32(buf4, uint32(maxBytes))
+	body = append(body, buf4...)
+
+	binary.BigEndian.PutUint32(buf4, 0)
 	body = append(body, buf4...)
 
 	header := make([]byte, 8)
