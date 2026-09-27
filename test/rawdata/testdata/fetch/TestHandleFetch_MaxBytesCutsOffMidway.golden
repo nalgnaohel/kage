@@ -1,0 +1,15 @@
+{
+  "ErrorCode": "ErrNone",
+  "HighWatermark": 3,
+  "NextOffset": 2,
+  "Records": [
+    {
+      "Offset": 0,
+      "Value": "aaaa"
+    },
+    {
+      "Offset": 1,
+      "Value": "bbbb"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "ErrorCode": "ErrUnknownTopicOrPartition",
+  "HighWatermark": 0,
+  "NextOffset": 0,
+  "Records": []
+}

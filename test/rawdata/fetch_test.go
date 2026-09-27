@@ -24,40 +24,96 @@ type wireRecord struct {
 	Value  []byte
 }
 
+type goldenRecord struct {
+	Offset uint64
+	Value  string
+}
+
+type fetchGolden struct {
+	ErrorCode     string
+	HighWatermark uint64
+	NextOffset    uint64
+	Records       []goldenRecord
+}
+
+func toGoldenRecords(recs []wireRecord) []goldenRecord {
+	out := make([]goldenRecord, len(recs))
+	for i, r := range recs {
+		out[i] = goldenRecord{Offset: r.Offset, Value: string(r.Value)}
+	}
+	return out
+}
+
+const (
+	frameLengthWidth   = 4
+	apiKeyWidth        = 2
+	apiVersionWidth    = 2
+	correlationIDWidth = 4
+)
+
+const requestHeaderSize = apiKeyWidth + apiVersionWidth + correlationIDWidth
+
+const (
+	topicLenWidth     = 2
+	partitionWidth    = 4
+	fetchOffsetWidth  = 8
+	maxBytesWidth     = 4
+	replicaIDWidth    = 4
+	requiredAcksWidth = 1
+	valueLenWidth     = 4
+)
+
+const (
+	errorCodeWidth     = 2
+	highWatermarkWidth = 8
+	nextOffsetWidth    = 8
+	payloadLenWidth    = 4
+	baseOffsetWidth    = 8
+)
+
+const (
+	recordOffsetWidth = 8
+	recordLenWidth    = 4
+)
+
 func recordSize(value []byte) int {
-	return 8 + 4 + len(value)
+	return recordOffsetWidth + recordLenWidth + len(value)
 }
 
 func encodeFetchRequest(correlationID uint32, topic string, partition int32, fetchOffset uint64, maxBytes int32) []byte {
-	body := make([]byte, 0, 2+len(topic)+4+8+4+4)
+	body := make([]byte, 0, topicLenWidth+len(topic)+partitionWidth+fetchOffsetWidth+maxBytesWidth+replicaIDWidth)
 
-	topicLen := make([]byte, 2)
-	binary.BigEndian.PutUint16(topicLen, uint16(len(topic)))
-	body = append(body, topicLen...)
+	topicLenBuf := make([]byte, topicLenWidth)
+	binary.BigEndian.PutUint16(topicLenBuf, uint16(len(topic)))
+	body = append(body, topicLenBuf...)
 	body = append(body, []byte(topic)...)
 
-	buf4 := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf4, uint32(partition))
-	body = append(body, buf4...)
+	partitionBuf := make([]byte, partitionWidth)
+	binary.BigEndian.PutUint32(partitionBuf, uint32(partition))
+	body = append(body, partitionBuf...)
 
-	buf8 := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf8, fetchOffset)
-	body = append(body, buf8...)
+	fetchOffsetBuf := make([]byte, fetchOffsetWidth)
+	binary.BigEndian.PutUint64(fetchOffsetBuf, fetchOffset)
+	body = append(body, fetchOffsetBuf...)
 
-	binary.BigEndian.PutUint32(buf4, uint32(maxBytes))
-	body = append(body, buf4...)
+	maxBytesBuf := make([]byte, maxBytesWidth)
+	binary.BigEndian.PutUint32(maxBytesBuf, uint32(maxBytes))
+	body = append(body, maxBytesBuf...)
 
-	replicaID := uint32(0)
-	binary.BigEndian.PutUint32(buf4, replicaID)
-	body = append(body, buf4...)
+	replicaIDBuf := make([]byte, replicaIDWidth)
+	binary.BigEndian.PutUint32(replicaIDBuf, 0)
+	body = append(body, replicaIDBuf...)
 
-	header := make([]byte, 8)
-	binary.BigEndian.PutUint16(header[0:2], rawdata.ApiFetch)
-	binary.BigEndian.PutUint16(header[2:4], 0)
-	binary.BigEndian.PutUint32(header[4:8], correlationID)
+	header := make([]byte, requestHeaderSize)
+	pos := 0
+	binary.BigEndian.PutUint16(header[pos:pos+apiKeyWidth], rawdata.ApiFetch)
+	pos += apiKeyWidth
+	binary.BigEndian.PutUint16(header[pos:pos+apiVersionWidth], 0)
+	pos += apiVersionWidth
+	binary.BigEndian.PutUint32(header[pos:pos+correlationIDWidth], correlationID)
 
 	frame := append(header, body...)
-	lenBuf := make([]byte, 4)
+	lenBuf := make([]byte, frameLengthWidth)
 	binary.BigEndian.PutUint32(lenBuf, uint32(len(frame)))
 	return append(lenBuf, frame...)
 }
@@ -65,7 +121,7 @@ func encodeFetchRequest(correlationID uint32, topic string, partition int32, fet
 func readFetchResponse(t *testing.T, conn net.Conn) fetchResponse {
 	t.Helper()
 
-	var lenBuf [4]byte
+	var lenBuf [frameLengthWidth]byte
 	if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
 		t.Fatalf("read response length: %v", err)
 	}
@@ -75,13 +131,24 @@ func readFetchResponse(t *testing.T, conn net.Conn) fetchResponse {
 		t.Fatalf("read response frame: %v", err)
 	}
 
-	payloadLen := binary.BigEndian.Uint32(frame[22:26])
+	pos := 0
+	correlationID := binary.BigEndian.Uint32(frame[pos : pos+correlationIDWidth])
+	pos += correlationIDWidth
+	errorCode := rawdata.ErrorCode(binary.BigEndian.Uint16(frame[pos : pos+errorCodeWidth]))
+	pos += errorCodeWidth
+	highWatermark := binary.BigEndian.Uint64(frame[pos : pos+highWatermarkWidth])
+	pos += highWatermarkWidth
+	nextOffset := binary.BigEndian.Uint64(frame[pos : pos+nextOffsetWidth])
+	pos += nextOffsetWidth
+	payloadLen := binary.BigEndian.Uint32(frame[pos : pos+payloadLenWidth])
+	pos += payloadLenWidth
+
 	return fetchResponse{
-		CorrelationID: binary.BigEndian.Uint32(frame[0:4]),
-		ErrorCode:     rawdata.ErrorCode(binary.BigEndian.Uint16(frame[4:6])),
-		HighWatermark: binary.BigEndian.Uint64(frame[6:14]),
-		NextOffset:    binary.BigEndian.Uint64(frame[14:22]),
-		Payload:       frame[26 : 26+payloadLen],
+		CorrelationID: correlationID,
+		ErrorCode:     errorCode,
+		HighWatermark: highWatermark,
+		NextOffset:    nextOffset,
+		Payload:       frame[pos : pos+int(payloadLen)],
 	}
 }
 
@@ -91,9 +158,10 @@ func splitWireRecords(t *testing.T, payload []byte) []wireRecord {
 	var recs []wireRecord
 	pos := 0
 	for pos < len(payload) {
-		off := binary.BigEndian.Uint64(payload[pos : pos+8])
-		length := binary.BigEndian.Uint32(payload[pos+8 : pos+12])
-		pos += 12
+		off := binary.BigEndian.Uint64(payload[pos : pos+recordOffsetWidth])
+		pos += recordOffsetWidth
+		length := binary.BigEndian.Uint32(payload[pos : pos+recordLenWidth])
+		pos += recordLenWidth
 		recs = append(recs, wireRecord{Offset: off, Value: payload[pos : pos+int(length)]})
 		pos += int(length)
 	}
@@ -148,26 +216,24 @@ func TestHandleFetch_HappyPath_SpansSeveralRecords(t *testing.T) {
 	}
 
 	resp := readFetchResponse(t, conn)
-	if resp.ErrorCode != rawdata.ErrNone {
-		t.Fatalf("errorCode = %d, want ErrNone", resp.ErrorCode)
-	}
-	if resp.NextOffset != uint64(len(values)) {
-		t.Fatalf("nextOffset = %d, want %d", resp.NextOffset, len(values))
-	}
-
 	recs := splitWireRecords(t, resp.Payload)
-	if len(recs) != len(values) {
-		t.Fatalf("got %d records, want %d", len(recs), len(values))
-	}
-	for i, rec := range recs {
+
+	for _, rec := range recs {
 		want, err := log.Read(rec.Offset)
 		if err != nil {
 			t.Fatalf("log.Read(%d): %v", rec.Offset, err)
 		}
 		if string(rec.Value) != string(want) {
-			t.Errorf("record %d: got %q, want %q", i, rec.Value, want)
+			t.Errorf("record at offset %d: fetch payload %q does not match log.Read %q", rec.Offset, rec.Value, want)
 		}
 	}
+
+	assertGolden(t, "fetch", fetchGolden{
+		ErrorCode:     errorCodeString(resp.ErrorCode),
+		HighWatermark: resp.HighWatermark,
+		NextOffset:    resp.NextOffset,
+		Records:       toGoldenRecords(recs),
+	})
 }
 
 func TestHandleFetch_MaxBytesCutsOffMidway(t *testing.T) {
@@ -194,17 +260,12 @@ func TestHandleFetch_MaxBytesCutsOffMidway(t *testing.T) {
 	}
 
 	resp := readFetchResponse(t, conn)
-	if resp.ErrorCode != rawdata.ErrNone {
-		t.Fatalf("errorCode = %d, want ErrNone", resp.ErrorCode)
-	}
-	if resp.NextOffset != 2 {
-		t.Fatalf("nextOffset = %d, want 2", resp.NextOffset)
-	}
-
-	recs := splitWireRecords(t, resp.Payload)
-	if len(recs) != 2 {
-		t.Fatalf("got %d records, want 2", len(recs))
-	}
+	assertGolden(t, "fetch", fetchGolden{
+		ErrorCode:     errorCodeString(resp.ErrorCode),
+		HighWatermark: resp.HighWatermark,
+		NextOffset:    resp.NextOffset,
+		Records:       toGoldenRecords(splitWireRecords(t, resp.Payload)),
+	})
 }
 
 func TestHandleFetch_OffsetEqualsHighWatermark_ReturnsEmpty(t *testing.T) {
@@ -225,15 +286,12 @@ func TestHandleFetch_OffsetEqualsHighWatermark_ReturnsEmpty(t *testing.T) {
 	}
 
 	resp := readFetchResponse(t, conn)
-	if resp.ErrorCode != rawdata.ErrNone {
-		t.Fatalf("errorCode = %d, want ErrNone", resp.ErrorCode)
-	}
-	if len(resp.Payload) != 0 {
-		t.Fatalf("payload len = %d, want 0", len(resp.Payload))
-	}
-	if resp.NextOffset != log.HighWatermark() {
-		t.Fatalf("nextOffset = %d, want %d", resp.NextOffset, log.HighWatermark())
-	}
+	assertGolden(t, "fetch", fetchGolden{
+		ErrorCode:     errorCodeString(resp.ErrorCode),
+		HighWatermark: resp.HighWatermark,
+		NextOffset:    resp.NextOffset,
+		Records:       toGoldenRecords(splitWireRecords(t, resp.Payload)),
+	})
 }
 
 func TestHandleFetch_OffsetPastHighWatermark_ReturnsError(t *testing.T) {
@@ -254,9 +312,12 @@ func TestHandleFetch_OffsetPastHighWatermark_ReturnsError(t *testing.T) {
 	}
 
 	resp := readFetchResponse(t, conn)
-	if resp.ErrorCode != rawdata.ErrOffsetOutOfRange {
-		t.Fatalf("errorCode = %d, want ErrOffsetOutOfRange", resp.ErrorCode)
-	}
+	assertGolden(t, "fetch", fetchGolden{
+		ErrorCode:     errorCodeString(resp.ErrorCode),
+		HighWatermark: resp.HighWatermark,
+		NextOffset:    resp.NextOffset,
+		Records:       toGoldenRecords(splitWireRecords(t, resp.Payload)),
+	})
 }
 
 func TestHandleFetch_UnknownTopicOrPartition_ReturnsError(t *testing.T) {
@@ -268,7 +329,10 @@ func TestHandleFetch_UnknownTopicOrPartition_ReturnsError(t *testing.T) {
 	}
 
 	resp := readFetchResponse(t, conn)
-	if resp.ErrorCode != rawdata.ErrUnknownTopicOrPartition {
-		t.Fatalf("errorCode = %d, want ErrUnknownTopicOrPartition", resp.ErrorCode)
-	}
+	assertGolden(t, "fetch", fetchGolden{
+		ErrorCode:     errorCodeString(resp.ErrorCode),
+		HighWatermark: resp.HighWatermark,
+		NextOffset:    resp.NextOffset,
+		Records:       toGoldenRecords(splitWireRecords(t, resp.Payload)),
+	})
 }

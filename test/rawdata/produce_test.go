@@ -16,30 +16,34 @@ type produceResponse struct {
 }
 
 func encodeProduceRequest(correlationID uint32, topic string, partition int32, requiredAcks uint8, value []byte) []byte {
-	body := make([]byte, 0, 2+len(topic)+4+1+4+len(value))
+	body := make([]byte, 0, topicLenWidth+len(topic)+partitionWidth+requiredAcksWidth+valueLenWidth+len(value))
 
-	topicLen := make([]byte, 2)
-	binary.BigEndian.PutUint16(topicLen, uint16(len(topic)))
-	body = append(body, topicLen...)
+	topicLenBuf := make([]byte, topicLenWidth)
+	binary.BigEndian.PutUint16(topicLenBuf, uint16(len(topic)))
+	body = append(body, topicLenBuf...)
 	body = append(body, []byte(topic)...)
 
-	buf4 := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf4, uint32(partition))
-	body = append(body, buf4...)
+	partitionBuf := make([]byte, partitionWidth)
+	binary.BigEndian.PutUint32(partitionBuf, uint32(partition))
+	body = append(body, partitionBuf...)
 
 	body = append(body, requiredAcks)
 
-	binary.BigEndian.PutUint32(buf4, uint32(len(value)))
-	body = append(body, buf4...)
+	valueLenBuf := make([]byte, valueLenWidth)
+	binary.BigEndian.PutUint32(valueLenBuf, uint32(len(value)))
+	body = append(body, valueLenBuf...)
 	body = append(body, value...)
 
-	header := make([]byte, 8)
-	binary.BigEndian.PutUint16(header[0:2], rawdata.ApiProduce)
-	binary.BigEndian.PutUint16(header[2:4], 0)
-	binary.BigEndian.PutUint32(header[4:8], correlationID)
+	header := make([]byte, requestHeaderSize)
+	pos := 0
+	binary.BigEndian.PutUint16(header[pos:pos+apiKeyWidth], rawdata.ApiProduce)
+	pos += apiKeyWidth
+	binary.BigEndian.PutUint16(header[pos:pos+apiVersionWidth], 0)
+	pos += apiVersionWidth
+	binary.BigEndian.PutUint32(header[pos:pos+correlationIDWidth], correlationID)
 
 	frame := append(header, body...)
-	lenBuf := make([]byte, 4)
+	lenBuf := make([]byte, frameLengthWidth)
 	binary.BigEndian.PutUint32(lenBuf, uint32(len(frame)))
 	return append(lenBuf, frame...)
 }
@@ -47,7 +51,7 @@ func encodeProduceRequest(correlationID uint32, topic string, partition int32, r
 func readProduceResponse(t *testing.T, conn net.Conn) produceResponse {
 	t.Helper()
 
-	var lenBuf [4]byte
+	var lenBuf [frameLengthWidth]byte
 	if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
 		t.Fatalf("read response length: %v", err)
 	}
@@ -57,10 +61,17 @@ func readProduceResponse(t *testing.T, conn net.Conn) produceResponse {
 		t.Fatalf("read response frame: %v", err)
 	}
 
+	pos := 0
+	correlationID := binary.BigEndian.Uint32(frame[pos : pos+correlationIDWidth])
+	pos += correlationIDWidth
+	errorCode := rawdata.ErrorCode(binary.BigEndian.Uint16(frame[pos : pos+errorCodeWidth]))
+	pos += errorCodeWidth
+	baseOffset := binary.BigEndian.Uint64(frame[pos : pos+baseOffsetWidth])
+
 	return produceResponse{
-		CorrelationID: binary.BigEndian.Uint32(frame[0:4]),
-		ErrorCode:     rawdata.ErrorCode(binary.BigEndian.Uint16(frame[4:6])),
-		BaseOffset:    binary.BigEndian.Uint64(frame[6:14]),
+		CorrelationID: correlationID,
+		ErrorCode:     errorCode,
+		BaseOffset:    baseOffset,
 	}
 }
 

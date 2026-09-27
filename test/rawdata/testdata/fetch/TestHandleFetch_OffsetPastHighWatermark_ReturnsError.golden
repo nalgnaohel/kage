@@ -1,0 +1,6 @@
+{
+  "ErrorCode": "ErrOffsetOutOfRange",
+  "HighWatermark": 1,
+  "NextOffset": 1,
+  "Records": []
+}

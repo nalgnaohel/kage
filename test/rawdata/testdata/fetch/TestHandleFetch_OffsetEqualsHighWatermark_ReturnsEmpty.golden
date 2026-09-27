@@ -1,0 +1,6 @@
+{
+  "ErrorCode": "ErrNone",
+  "HighWatermark": 1,
+  "NextOffset": 1,
+  "Records": []
+}
