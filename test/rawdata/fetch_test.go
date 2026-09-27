@@ -140,6 +140,7 @@ func TestHandleFetch_HappyPath_SpansSeveralRecords(t *testing.T) {
 			t.Fatalf("Append: %v", err)
 		}
 	}
+	log.SetHighWatermark(log.LogEndOffset())
 
 	req := encodeFetchRequest(1, "topic-a", 0, 0, 1<<20)
 	if _, err := conn.Write(req); err != nil {
@@ -183,6 +184,7 @@ func TestHandleFetch_MaxBytesCutsOffMidway(t *testing.T) {
 			t.Fatalf("Append: %v", err)
 		}
 	}
+	log.SetHighWatermark(log.LogEndOffset())
 
 	maxBytes := recordSize(values[0]) + recordSize(values[1])
 
@@ -215,6 +217,7 @@ func TestHandleFetch_OffsetEqualsHighWatermark_ReturnsEmpty(t *testing.T) {
 	if _, err := log.Append([]byte("only-record")); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
+	log.SetHighWatermark(log.LogEndOffset())
 
 	req := encodeFetchRequest(3, "topic-c", 0, log.HighWatermark(), 1<<20)
 	if _, err := conn.Write(req); err != nil {
@@ -243,6 +246,7 @@ func TestHandleFetch_OffsetPastHighWatermark_ReturnsError(t *testing.T) {
 	if _, err := log.Append([]byte("only-record")); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
+	log.SetHighWatermark(log.LogEndOffset())
 
 	req := encodeFetchRequest(4, "topic-d", 0, 999, 1<<20)
 	if _, err := conn.Write(req); err != nil {

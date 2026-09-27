@@ -18,13 +18,17 @@ func (s *Server) handleFetch(conn net.Conn, hdr RequestHeader, body []byte) {
 	}
 
 	hw := l.HighWatermark()
+	bound := hw
+	if req.ReplicaID != 0 {
+		bound = l.LogEndOffset()
+	}
 
-	if req.FetchOffset == hw {
-		EncodeFetchResponseHeader(conn, hdr.CorrelationID, ErrNone, hw, hw, 0)
+	if req.FetchOffset == bound {
+		EncodeFetchResponseHeader(conn, hdr.CorrelationID, ErrNone, hw, bound, 0)
 		return
 	}
-	if req.FetchOffset > hw {
-		EncodeFetchResponseHeader(conn, hdr.CorrelationID, ErrOffsetOutOfRange, hw, hw, 0)
+	if req.FetchOffset > bound {
+		EncodeFetchResponseHeader(conn, hdr.CorrelationID, ErrOffsetOutOfRange, hw, bound, 0)
 		return
 	}
 

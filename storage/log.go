@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +19,8 @@ type Log struct {
 
 	activeSegment *Segment
 	segments      []*Segment
+
+	highWatermark atomic.Uint64
 }
 
 type LogConfig struct {
@@ -162,10 +165,17 @@ func (l *Log) LocateRange(startOffset uint64, maxBytes int32) (seg *Segment, rng
 	return seg, rng, nil
 }
 
-// HighWatermark returns activeSegment.nextOffset.
-func (l *Log) HighWatermark() uint64 {
+func (l *Log) LogEndOffset() uint64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	return l.activeSegment.nextOffset
+}
+
+func (l *Log) HighWatermark() uint64 {
+	return l.highWatermark.Load()
+}
+
+func (l *Log) SetHighWatermark(offset uint64) {
+	l.highWatermark.Store(offset)
 }
