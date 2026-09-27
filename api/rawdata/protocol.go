@@ -23,6 +23,13 @@ const (
 )
 
 const (
+	frameLengthWidth   = 4
+	apiKeyWidth        = 2
+	apiVersionWidth    = 2
+	correlationIDWidth = 4
+)
+
+const (
 	topicLenWidth     = 2
 	partitionWidth    = 4
 	fetchOffsetWidth  = 8
@@ -31,11 +38,19 @@ const (
 	valueLenWidth     = 4
 )
 
-const requestHeaderSize = 2 + 2 + 4
+const (
+	errorCodeWidth     = 2
+	highWatermarkWidth = 8
+	nextOffsetWidth    = 8
+	payloadLenWidth    = 4
+	baseOffsetWidth    = 8
+)
 
-const responseHeaderSize = 4 + 2 + 8 + 8 + 4
+const requestHeaderSize = apiKeyWidth + apiVersionWidth + correlationIDWidth
 
-const produceResponseHeaderSize = 4 + 2 + 8
+const responseHeaderSize = correlationIDWidth + errorCodeWidth + highWatermarkWidth + nextOffsetWidth + payloadLenWidth
+
+const produceResponseHeaderSize = correlationIDWidth + errorCodeWidth + baseOffsetWidth
 
 type RequestHeader struct {
 	APIKey        uint16
@@ -58,7 +73,7 @@ type ProduceRequest struct {
 }
 
 func ReadRequest(r io.Reader) (RequestHeader, []byte, error) {
-	var lenBuf [4]byte
+	var lenBuf [frameLengthWidth]byte
 	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
 		return RequestHeader{}, nil, err
 	}
@@ -71,11 +86,14 @@ func ReadRequest(r io.Reader) (RequestHeader, []byte, error) {
 		return RequestHeader{}, nil, fmt.Errorf("rawdata: request frame too short (%d bytes)", len(frame))
 	}
 
-	hdr := RequestHeader{
-		APIKey:        enc.Uint16(frame[0:2]),
-		APIVersion:    enc.Uint16(frame[2:4]),
-		CorrelationID: enc.Uint32(frame[4:8]),
-	}
+	pos := 0
+	apiKey := enc.Uint16(frame[pos : pos+apiKeyWidth])
+	pos += apiKeyWidth
+	apiVersion := enc.Uint16(frame[pos : pos+apiVersionWidth])
+	pos += apiVersionWidth
+	correlationID := enc.Uint32(frame[pos : pos+correlationIDWidth])
+
+	hdr := RequestHeader{APIKey: apiKey, APIVersion: apiVersion, CorrelationID: correlationID}
 	return hdr, frame[requestHeaderSize:], nil
 }
 
@@ -138,24 +156,34 @@ func DecodeProduceRequest(body []byte) (ProduceRequest, error) {
 func EncodeFetchResponseHeader(w io.Writer, correlationID uint32, code ErrorCode, hw, nextOffset uint64, payloadLen uint32) error {
 	totalLength := uint32(responseHeaderSize) + payloadLen
 
-	buf := make([]byte, 4+responseHeaderSize)
-	enc.PutUint32(buf[0:4], totalLength)
-	enc.PutUint32(buf[4:8], correlationID)
-	enc.PutUint16(buf[8:10], uint16(code))
-	enc.PutUint64(buf[10:18], hw)
-	enc.PutUint64(buf[18:26], nextOffset)
-	enc.PutUint32(buf[26:30], payloadLen)
+	buf := make([]byte, frameLengthWidth+responseHeaderSize)
+	pos := 0
+	enc.PutUint32(buf[pos:pos+frameLengthWidth], totalLength)
+	pos += frameLengthWidth
+	enc.PutUint32(buf[pos:pos+correlationIDWidth], correlationID)
+	pos += correlationIDWidth
+	enc.PutUint16(buf[pos:pos+errorCodeWidth], uint16(code))
+	pos += errorCodeWidth
+	enc.PutUint64(buf[pos:pos+highWatermarkWidth], hw)
+	pos += highWatermarkWidth
+	enc.PutUint64(buf[pos:pos+nextOffsetWidth], nextOffset)
+	pos += nextOffsetWidth
+	enc.PutUint32(buf[pos:pos+payloadLenWidth], payloadLen)
 
 	_, err := w.Write(buf)
 	return err
 }
 
 func EncodeProduceResponse(w io.Writer, correlationID uint32, code ErrorCode, baseOffset uint64) error {
-	buf := make([]byte, 4+produceResponseHeaderSize)
-	enc.PutUint32(buf[0:4], uint32(produceResponseHeaderSize))
-	enc.PutUint32(buf[4:8], correlationID)
-	enc.PutUint16(buf[8:10], uint16(code))
-	enc.PutUint64(buf[10:18], baseOffset)
+	buf := make([]byte, frameLengthWidth+produceResponseHeaderSize)
+	pos := 0
+	enc.PutUint32(buf[pos:pos+frameLengthWidth], uint32(produceResponseHeaderSize))
+	pos += frameLengthWidth
+	enc.PutUint32(buf[pos:pos+correlationIDWidth], correlationID)
+	pos += correlationIDWidth
+	enc.PutUint16(buf[pos:pos+errorCodeWidth], uint16(code))
+	pos += errorCodeWidth
+	enc.PutUint64(buf[pos:pos+baseOffsetWidth], baseOffset)
 
 	_, err := w.Write(buf)
 	return err
