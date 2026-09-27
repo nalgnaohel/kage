@@ -17,6 +17,10 @@ func (s *Server) handleFetch(conn net.Conn, hdr RequestHeader, body []byte) {
 		return
 	}
 
+	if req.ReplicaID != 0 && s.OnReplicaFetch != nil {
+		s.OnReplicaFetch(req.Topic, req.Partition, req.ReplicaID, req.FetchOffset)
+	}
+
 	hw := l.HighWatermark()
 	bound := hw
 	if req.ReplicaID != 0 {
