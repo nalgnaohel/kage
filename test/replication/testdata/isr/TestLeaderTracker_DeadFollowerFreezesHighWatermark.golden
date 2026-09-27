@@ -1,0 +1,17 @@
+[
+  {
+    "Stage": "both-caught-up",
+    "HighWatermark": 2,
+    "LogEndOffset": 2
+  },
+  {
+    "Stage": "follower3-stale",
+    "HighWatermark": 2,
+    "LogEndOffset": 5
+  },
+  {
+    "Stage": "follower3-still-stale",
+    "HighWatermark": 2,
+    "LogEndOffset": 7
+  }
+]

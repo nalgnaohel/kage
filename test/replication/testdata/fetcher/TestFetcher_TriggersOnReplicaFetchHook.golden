@@ -1,0 +1,6 @@
+{
+  "Topic": "topic-e",
+  "Partition": 0,
+  "ReplicaID": 7,
+  "FetchOffset": 0
+}

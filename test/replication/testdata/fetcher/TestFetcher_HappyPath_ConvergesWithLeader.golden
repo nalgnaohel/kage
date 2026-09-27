@@ -1,0 +1,14 @@
+[
+  {
+    "Offset": 0,
+    "Value": "hello"
+  },
+  {
+    "Offset": 1,
+    "Value": "world"
+  },
+  {
+    "Offset": 2,
+    "Value": "foo"
+  }
+]
