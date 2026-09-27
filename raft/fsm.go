@@ -15,6 +15,7 @@ type BrokerInfo struct {
 	Host     string
 	Port     int32
 	RaftAddr string
+	RawAddr  string
 }
 
 type PartitionAssignment struct {
@@ -128,6 +129,7 @@ func (f *FSM) applyRegisterBroker(cmd Command) error {
 		Host:     payload.Host,
 		Port:     payload.Port,
 		RaftAddr: payload.RaftAddr,
+		RawAddr:  payload.RawAddr,
 	}
 	return nil
 }

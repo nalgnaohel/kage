@@ -20,6 +20,7 @@ type RegisterBrokerCommand struct {
 	Host     string
 	Port     int32
 	RaftAddr string
+	RawAddr  string
 }
 
 type CreateTopicCommand struct {

@@ -148,6 +148,7 @@ type JoinRequest struct {
 	Host     string
 	Port     int32
 	RaftAddr string
+	RawAddr  string
 }
 
 // Join adds req as a voter and registers it in cluster metadata. Only the
@@ -174,6 +175,7 @@ func (n *Node) Join(req JoinRequest) error {
 		Host:     req.Host,
 		Port:     req.Port,
 		RaftAddr: req.RaftAddr,
+		RawAddr:  req.RawAddr,
 	})
 	if err != nil {
 		return err

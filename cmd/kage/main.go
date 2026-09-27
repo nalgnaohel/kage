@@ -37,6 +37,7 @@ func main() {
 	dataDir := flag.String("data-dir", "data", "base directory for partition logs")
 	grpcAddr := flag.String("grpc-addr", ":9093", "listen address for the kadmin gRPC server")
 	rawAddr := flag.String("raw-addr", ":9092", "listen address for the raw TCP data-plane server")
+	rawPort := flag.Int("raw-port", 9092, "this broker's advertised raw data-plane port")
 	host := flag.String("host", "localhost", "this broker's advertised host")
 	port := flag.Int("port", 9093, "this broker's advertised port")
 	brokerID := flag.Int("broker-id", 0, "this broker's ID")
@@ -52,6 +53,7 @@ func main() {
 	}
 
 	advertisedRaftAddr := fmt.Sprintf("%s:%d", *host, *raftPort)
+	advertisedRawAddr := fmt.Sprintf("%s:%d", *host, *rawPort)
 
 	reg := broker.NewRegistry(*dataDir, storage.DefaultLogConfig())
 	if err := reg.Startup(); err != nil {
@@ -73,6 +75,7 @@ func main() {
 		Host:     *host,
 		Port:     int32(*port),
 		RaftAddr: advertisedRaftAddr,
+		RawAddr:  advertisedRawAddr,
 	}
 
 	if *bootstrap {
@@ -159,6 +162,7 @@ func callJoinCluster(addr string, req raft.JoinRequest) (*pb.JoinClusterResponse
 		Host:     req.Host,
 		Port:     req.Port,
 		RaftAddr: req.RaftAddr,
+		RawAddr:  req.RawAddr,
 	})
 }
 

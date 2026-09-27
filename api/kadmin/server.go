@@ -125,6 +125,7 @@ func (s *Server) JoinCluster(_ context.Context, req *pb.JoinClusterRequest) (*pb
 		Host:     req.GetHost(),
 		Port:     req.GetPort(),
 		RaftAddr: req.GetRaftAddr(),
+		RawAddr:  req.GetRawAddr(),
 	})
 	if err != nil {
 		return &pb.JoinClusterResponse{Success: false, Message: s.proposeErrMessage(err)}, nil

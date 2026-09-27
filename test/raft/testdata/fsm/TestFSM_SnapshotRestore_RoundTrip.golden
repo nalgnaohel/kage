@@ -5,7 +5,8 @@
         "BrokerID": 1,
         "Host": "localhost",
         "Port": 9092,
-        "RaftAddr": "127.0.0.1:9094"
+        "RaftAddr": "127.0.0.1:9094",
+        "RawAddr": ""
       }
     },
     "Topics": {
@@ -38,7 +39,8 @@
         "BrokerID": 1,
         "Host": "localhost",
         "Port": 9092,
-        "RaftAddr": "127.0.0.1:9094"
+        "RaftAddr": "127.0.0.1:9094",
+        "RawAddr": ""
       }
     },
     "Topics": {

@@ -77,6 +77,7 @@ message JoinClusterRequest {
   string host = 2;
   int32 port = 3;
   string raft_addr = 4;
+  string raw_addr = 5;
 }
 
 message JoinClusterResponse {
