@@ -166,3 +166,46 @@ func TestLeaderTracker_Run_ShrinksThenExpandsISR(t *testing.T) {
 	tracker.OnReplicaFetch("topic-shrink", 0, 2, 0)
 	waitFor(t, time.Second, func() bool { return slices.Equal(currentISR(), []int32{1, 2}) })
 }
+
+func TestLeaderTracker_WaitForHW_UnblocksOnceStaleFollowerDropsFromISR(t *testing.T) {
+	node := bootstrapLeaderNode(t, 1)
+	registerBroker(t, node, 1)
+	registerBroker(t, node, 2)
+	registerBroker(t, node, 3)
+	createTopic(t, node, "topic-wait", 1, 3)
+
+	reg, log := newRegistryLog(t, "topic-wait", 0)
+	if _, err := log.Append([]byte("a")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	tracker := replication.NewLeaderTracker(node, reg,
+		replication.WithReplicaLagTimeout(80*time.Millisecond),
+		replication.WithISRCheckInterval(20*time.Millisecond),
+	)
+	go tracker.Run(t.Context())
+
+	stopFollower2 := make(chan struct{})
+	defer close(stopFollower2)
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopFollower2:
+				return
+			case <-ticker.C:
+				tracker.OnReplicaFetch("topic-wait", 0, 2, 1)
+			}
+		}
+	}()
+
+	currentISR := func() []int32 {
+		return node.FSM().State().Topics["topic-wait"].Partitions[0].Isr
+	}
+	waitFor(t, time.Second, func() bool { return slices.Equal(currentISR(), []int32{1, 2}) })
+
+	if err := tracker.WaitForHW("topic-wait", 0, 1, time.Second); err != nil {
+		t.Fatalf("WaitForHW: %v", err)
+	}
+}

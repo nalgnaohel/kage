@@ -2,12 +2,45 @@ package rawdata_test
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/nalgnaohel/kage/api/rawdata"
+	"github.com/nalgnaohel/kage/broker"
+	"github.com/nalgnaohel/kage/storage"
 )
+
+var errWaitForHWTimeout = errors.New("wait for hw: timed out")
+
+func newTestServerWithWaitForHW(t *testing.T, waitForHW func(topic string, partition int32, offset uint64, timeout time.Duration) error) (*broker.Registry, net.Conn) {
+	t.Helper()
+
+	reg := broker.NewRegistry(t.TempDir(), storage.DefaultLogConfig())
+	if err := reg.Startup(); err != nil {
+		t.Fatalf("registry startup: %v", err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	srv := rawdata.NewServer(reg)
+	srv.WaitForHW = waitForHW
+	go srv.Serve(ln)
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	return reg, conn
+}
 
 type produceResponse struct {
 	CorrelationID uint32
@@ -144,5 +177,67 @@ func TestHandleProduce_UnknownTopicOrPartition_ReturnsError(t *testing.T) {
 	resp := readProduceResponse(t, conn)
 	if resp.ErrorCode != rawdata.ErrUnknownTopicOrPartition {
 		t.Fatalf("errorCode = %d, want ErrUnknownTopicOrPartition", resp.ErrorCode)
+	}
+}
+
+func TestHandleProduce_AcksAll_BlocksUntilWaitForHWReturns(t *testing.T) {
+	release := make(chan struct{})
+	var gotOffset uint64
+	reg, conn := newTestServerWithWaitForHW(t, func(topic string, partition int32, offset uint64, timeout time.Duration) error {
+		gotOffset = offset
+		<-release
+		return nil
+	})
+
+	if _, err := reg.CreateLog("produce-acks-all", 0); err != nil {
+		t.Fatalf("CreateLog: %v", err)
+	}
+
+	req := encodeProduceRequest(1, "produce-acks-all", 0, rawdata.RequiredAcksAll, []byte("hello"))
+	if _, err := conn.Write(req); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+
+	done := make(chan produceResponse, 1)
+	go func() { done <- readProduceResponse(t, conn) }()
+
+	select {
+	case <-done:
+		t.Fatal("response arrived before WaitForHW returned")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case resp := <-done:
+		if resp.ErrorCode != rawdata.ErrNone {
+			t.Fatalf("errorCode = %d, want ErrNone", resp.ErrorCode)
+		}
+		if gotOffset != resp.BaseOffset+1 {
+			t.Fatalf("WaitForHW called with offset %d, want %d", gotOffset, resp.BaseOffset+1)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("response never arrived after WaitForHW returned")
+	}
+}
+
+func TestHandleProduce_AcksAll_WaitForHWErrorReturnsInternal(t *testing.T) {
+	reg, conn := newTestServerWithWaitForHW(t, func(topic string, partition int32, offset uint64, timeout time.Duration) error {
+		return errWaitForHWTimeout
+	})
+
+	if _, err := reg.CreateLog("produce-acks-all-timeout", 0); err != nil {
+		t.Fatalf("CreateLog: %v", err)
+	}
+
+	req := encodeProduceRequest(1, "produce-acks-all-timeout", 0, rawdata.RequiredAcksAll, []byte("hello"))
+	if _, err := conn.Write(req); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+
+	resp := readProduceResponse(t, conn)
+	if resp.ErrorCode != rawdata.ErrInternal {
+		t.Fatalf("errorCode = %d, want ErrInternal", resp.ErrorCode)
 	}
 }
