@@ -95,7 +95,7 @@ func (s *Server) DescribeTopic(_ context.Context, req *pb.DescribeTopicRequest) 
 			PartitionId: p,
 			Leader:      leader,
 			Replicas:    assignment.Replicas,
-			Isr:         assignment.Replicas,
+			Isr:         assignment.Isr,
 		}
 	}
 
