@@ -82,6 +82,12 @@ type ProduceRequest struct {
 	Value        []byte
 }
 
+const (
+	RequiredAcksNone   uint8 = 0
+	RequiredAcksLeader uint8 = 1
+	RequiredAcksAll    uint8 = 2
+)
+
 func ReadRequest(r io.Reader) (RequestHeader, []byte, error) {
 	var lenBuf [frameLengthWidth]byte
 	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {

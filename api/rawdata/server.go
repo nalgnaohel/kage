@@ -2,6 +2,7 @@ package rawdata
 
 import (
 	"net"
+	"time"
 
 	"github.com/nalgnaohel/kage/broker"
 )
@@ -10,6 +11,7 @@ type Server struct {
 	registry *broker.Registry
 
 	OnReplicaFetch func(topic string, partition int32, replicaID int32, fetchOffset uint64)
+	WaitForHW      func(topic string, partition int32, offset uint64, timeout time.Duration) error
 }
 
 func NewServer(reg *broker.Registry) *Server {

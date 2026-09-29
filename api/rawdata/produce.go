@@ -8,6 +8,7 @@ import (
 const (
 	produceBatchSize = 100
 	produceLinger    = 10 * time.Millisecond
+	acksAllTimeout   = 5 * time.Second
 )
 
 func (s *Server) handleProduce(conn net.Conn, hdr RequestHeader, body []byte) {
@@ -26,6 +27,13 @@ func (s *Server) handleProduce(conn net.Conn, hdr RequestHeader, body []byte) {
 	if res.Error != nil {
 		EncodeProduceResponse(conn, hdr.CorrelationID, ErrInternal, 0)
 		return
+	}
+
+	if req.RequiredAcks == RequiredAcksAll && s.WaitForHW != nil {
+		if err := s.WaitForHW(req.Topic, req.Partition, uint64(res.Offset)+1, acksAllTimeout); err != nil {
+			EncodeProduceResponse(conn, hdr.CorrelationID, ErrInternal, uint64(res.Offset))
+			return
+		}
 	}
 
 	EncodeProduceResponse(conn, hdr.CorrelationID, ErrNone, uint64(res.Offset))

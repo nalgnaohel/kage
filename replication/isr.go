@@ -32,6 +32,9 @@ type LeaderTracker struct {
 
 	mu        sync.Mutex
 	followers map[string]map[int32]followerState
+
+	hwMu      sync.Mutex
+	hwWaiters map[string]chan struct{}
 }
 
 type LeaderTrackerOption func(*LeaderTracker)
@@ -51,6 +54,7 @@ func NewLeaderTracker(node *raft.Node, registry *broker.Registry, opts ...Leader
 		replicaLagTimeout: replicaLagTimeout,
 		isrCheckInterval:  isrCheckInterval,
 		followers:         make(map[string]map[int32]followerState),
+		hwWaiters:         make(map[string]chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(t)
@@ -171,5 +175,58 @@ func (t *LeaderTracker) recomputeHW(topic string, partition int32) {
 	}
 	t.mu.Unlock()
 
+	if hw == l.HighWatermark() {
+		return
+	}
 	l.SetHighWatermark(hw)
+	t.broadcastHW(partitionKey(topic, partition))
+}
+
+func (t *LeaderTracker) hwWaitChan(key string) chan struct{} {
+	t.hwMu.Lock()
+	defer t.hwMu.Unlock()
+
+	ch, ok := t.hwWaiters[key]
+	if !ok {
+		ch = make(chan struct{})
+		t.hwWaiters[key] = ch
+	}
+	return ch
+}
+
+func (t *LeaderTracker) broadcastHW(key string) {
+	t.hwMu.Lock()
+	defer t.hwMu.Unlock()
+
+	if ch, ok := t.hwWaiters[key]; ok {
+		close(ch)
+	}
+	t.hwWaiters[key] = make(chan struct{})
+}
+
+func (t *LeaderTracker) WaitForHW(topic string, partition int32, offset uint64, timeout time.Duration) error {
+	l, ok := t.registry.GetLog(topic, partition)
+	if !ok {
+		return fmt.Errorf("replication: unknown partition %s-%d", topic, partition)
+	}
+
+	key := partitionKey(topic, partition)
+	deadline := time.Now().Add(timeout)
+	for {
+		ch := t.hwWaitChan(key)
+		if l.HighWatermark() >= offset {
+			return nil
+		}
+
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return fmt.Errorf("replication: timed out waiting for %s-%d to reach offset %d", topic, partition, offset)
+		}
+
+		select {
+		case <-ch:
+		case <-time.After(remaining):
+			return fmt.Errorf("replication: timed out waiting for %s-%d to reach offset %d", topic, partition, offset)
+		}
+	}
 }
