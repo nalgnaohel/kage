@@ -1,6 +1,7 @@
 package replication_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -139,4 +140,29 @@ func TestLeaderTracker_DeadFollowerFreezesHighWatermark(t *testing.T) {
 	stages = append(stages, hwStage{Stage: "follower3-still-stale", HighWatermark: log.HighWatermark(), LogEndOffset: log.LogEndOffset()})
 
 	assertGolden(t, "isr", stages)
+}
+
+func TestLeaderTracker_Run_ShrinksThenExpandsISR(t *testing.T) {
+	node := bootstrapLeaderNode(t, 1)
+	registerBroker(t, node, 1)
+	registerBroker(t, node, 2)
+	createTopic(t, node, "topic-shrink", 1, 2)
+
+	reg, _ := newRegistryLog(t, "topic-shrink", 0)
+
+	tracker := replication.NewLeaderTracker(node, reg,
+		replication.WithReplicaLagTimeout(80*time.Millisecond),
+		replication.WithISRCheckInterval(20*time.Millisecond),
+	)
+
+	go tracker.Run(t.Context())
+
+	currentISR := func() []int32 {
+		return node.FSM().State().Topics["topic-shrink"].Partitions[0].Isr
+	}
+
+	waitFor(t, time.Second, func() bool { return slices.Equal(currentISR(), []int32{1}) })
+
+	tracker.OnReplicaFetch("topic-shrink", 0, 2, 0)
+	waitFor(t, time.Second, func() bool { return slices.Equal(currentISR(), []int32{1, 2}) })
 }
