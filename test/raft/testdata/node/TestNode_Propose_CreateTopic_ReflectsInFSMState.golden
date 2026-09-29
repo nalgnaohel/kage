@@ -6,10 +6,12 @@
       "ReplicationFactor": 1,
       "Partitions": {
         "0": {
-          "Replicas": []
+          "Replicas": [],
+          "Isr": []
         },
         "1": {
-          "Replicas": []
+          "Replicas": [],
+          "Isr": []
         }
       }
     }

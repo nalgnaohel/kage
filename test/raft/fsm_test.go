@@ -101,6 +101,95 @@ func TestFSM_Apply_CreateThenDeleteTopic(t *testing.T) {
 	}{respErrString(createResp), respErrString(deleteResp), fsm.State()})
 }
 
+func TestFSM_Apply_UpdateISR_Shrink(t *testing.T) {
+	fsm := raft.NewFSM()
+
+	registerCmd1, err := raft.NewRegisterBrokerCommand(raft.RegisterBrokerCommand{
+		BrokerID: 1, Host: "localhost", Port: 9092, RaftAddr: "127.0.0.1:9094",
+	})
+	if err != nil {
+		t.Fatalf("NewRegisterBrokerCommand() failed: %v", err)
+	}
+	registerCmd2, err := raft.NewRegisterBrokerCommand(raft.RegisterBrokerCommand{
+		BrokerID: 2, Host: "localhost", Port: 9093, RaftAddr: "127.0.0.1:9095",
+	})
+	if err != nil {
+		t.Fatalf("NewRegisterBrokerCommand() failed: %v", err)
+	}
+	createCmd, err := raft.NewCreateTopicCommand(raft.CreateTopicCommand{
+		Topic: "orders", NumPartitions: 1, ReplicationFactor: 2,
+	})
+	if err != nil {
+		t.Fatalf("NewCreateTopicCommand() failed: %v", err)
+	}
+	updateISRCmd, err := raft.NewUpdateISRCommand(raft.UpdateISRCommand{
+		Topic: "orders", Partition: 0, ISR: []int32{1},
+	})
+	if err != nil {
+		t.Fatalf("NewUpdateISRCommand() failed: %v", err)
+	}
+
+	apply(t, fsm, registerCmd1)
+	apply(t, fsm, registerCmd2)
+	apply(t, fsm, createCmd)
+	resp := apply(t, fsm, updateISRCmd)
+
+	assertGolden(t, "fsm", struct {
+		RespErr string
+		State   raft.State
+	}{respErrString(resp), fsm.State()})
+}
+
+func TestFSM_Apply_UpdateISR_NotAReplica_ReturnsErrorWithoutMutatingState(t *testing.T) {
+	fsm := raft.NewFSM()
+
+	registerCmd, err := raft.NewRegisterBrokerCommand(raft.RegisterBrokerCommand{
+		BrokerID: 1, Host: "localhost", Port: 9092, RaftAddr: "127.0.0.1:9094",
+	})
+	if err != nil {
+		t.Fatalf("NewRegisterBrokerCommand() failed: %v", err)
+	}
+	createCmd, err := raft.NewCreateTopicCommand(raft.CreateTopicCommand{
+		Topic: "orders", NumPartitions: 1, ReplicationFactor: 1,
+	})
+	if err != nil {
+		t.Fatalf("NewCreateTopicCommand() failed: %v", err)
+	}
+	updateISRCmd, err := raft.NewUpdateISRCommand(raft.UpdateISRCommand{
+		Topic: "orders", Partition: 0, ISR: []int32{1, 2},
+	})
+	if err != nil {
+		t.Fatalf("NewUpdateISRCommand() failed: %v", err)
+	}
+
+	apply(t, fsm, registerCmd)
+	apply(t, fsm, createCmd)
+	resp := apply(t, fsm, updateISRCmd)
+
+	assertGolden(t, "fsm", struct {
+		RespErr string
+		State   raft.State
+	}{respErrString(resp), fsm.State()})
+}
+
+func TestFSM_Apply_UpdateISR_UnknownTopic_ReturnsError(t *testing.T) {
+	fsm := raft.NewFSM()
+
+	updateISRCmd, err := raft.NewUpdateISRCommand(raft.UpdateISRCommand{
+		Topic: "missing", Partition: 0, ISR: []int32{1},
+	})
+	if err != nil {
+		t.Fatalf("NewUpdateISRCommand() failed: %v", err)
+	}
+
+	resp := apply(t, fsm, updateISRCmd)
+
+	assertGolden(t, "fsm", struct {
+		RespErr string
+		State   raft.State
+	}{respErrString(resp), fsm.State()})
+}
+
 func TestFSM_Apply_UnknownCommandType_ReturnsError(t *testing.T) {
 	fsm := raft.NewFSM()
 

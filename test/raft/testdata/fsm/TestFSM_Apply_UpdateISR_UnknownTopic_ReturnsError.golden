@@ -1,0 +1,7 @@
+{
+  "RespErr": "raft: topic \"missing\" does not exist",
+  "State": {
+    "Brokers": {},
+    "Topics": {}
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "RespErr": "raft: broker 2 is not a replica of orders/0",
+  "State": {
+    "Brokers": {
+      "1": {
+        "BrokerID": 1,
+        "Host": "localhost",
+        "Port": 9092,
+        "RaftAddr": "127.0.0.1:9094",
+        "RawAddr": ""
+      }
+    },
+    "Topics": {
+      "orders": {
+        "NumPartitions": 1,
+        "ReplicationFactor": 1,
+        "Partitions": {
+          "0": {
+            "Replicas": [
+              1
+            ],
+            "Isr": [
+              1
+            ]
+          }
+        }
+      }
+    }
+  }
+}

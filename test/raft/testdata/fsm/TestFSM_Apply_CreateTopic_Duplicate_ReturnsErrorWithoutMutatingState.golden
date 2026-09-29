@@ -9,7 +9,8 @@
         "ReplicationFactor": 1,
         "Partitions": {
           "0": {
-            "Replicas": []
+            "Replicas": [],
+            "Isr": []
           }
         }
       }

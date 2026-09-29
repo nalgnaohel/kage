@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 
 	hraft "github.com/hashicorp/raft"
@@ -20,6 +21,7 @@ type BrokerInfo struct {
 
 type PartitionAssignment struct {
 	Replicas []int32
+	Isr      []int32
 }
 
 type TopicMeta struct {
@@ -42,15 +44,11 @@ func newState() State {
 
 func (s State) clone() State {
 	out := newState()
-	for id, b := range s.Brokers {
-		out.Brokers[id] = b
-	}
+	maps.Copy(out.Brokers, s.Brokers)
 	for topic, meta := range s.Topics {
 		partitions := make(map[int32]PartitionAssignment, len(meta.Partitions))
 		for p, a := range meta.Partitions {
-			replicas := make([]int32, len(a.Replicas))
-			copy(replicas, a.Replicas)
-			partitions[p] = PartitionAssignment{Replicas: replicas}
+			partitions[p] = PartitionAssignment{Replicas: slices.Clone(a.Replicas), Isr: slices.Clone(a.Isr)}
 		}
 		meta.Partitions = partitions
 		out.Topics[topic] = meta
@@ -89,7 +87,7 @@ func (f *FSM) signal() {
 	}
 }
 
-func (f *FSM) Apply(l *hraft.Log) interface{} {
+func (f *FSM) Apply(l *hraft.Log) any {
 	cmd, err := Decode(l.Data)
 	if err != nil {
 		return err
@@ -106,6 +104,8 @@ func (f *FSM) Apply(l *hraft.Log) interface{} {
 		applyErr = f.applyCreateTopic(cmd)
 	case CmdDeleteTopic:
 		applyErr = f.applyDeleteTopic(cmd)
+	case CmdUpdateISR:
+		applyErr = f.applyUpdateISR(cmd)
 	default:
 		applyErr = fmt.Errorf("raft: unknown command type %q", cmd.Type)
 	}
@@ -163,19 +163,16 @@ func (f *FSM) placePartitions(numPartitions, replicationFactor int32) map[int32]
 	for id := range f.state.Brokers {
 		sorted = append(sorted, id)
 	}
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	slices.Sort(sorted)
 
-	replicaCount := int(replicationFactor)
-	if len(sorted) < replicaCount {
-		replicaCount = len(sorted)
-	}
+	replicaCount := min(int(replicationFactor), len(sorted))
 
-	for p := int32(0); p < numPartitions; p++ {
+	for p := range numPartitions {
 		replicas := make([]int32, replicaCount)
-		for i := 0; i < replicaCount; i++ {
+		for i := range replicaCount {
 			replicas[i] = sorted[(int(p)+i)%len(sorted)]
 		}
-		partitions[p] = PartitionAssignment{Replicas: replicas}
+		partitions[p] = PartitionAssignment{Replicas: replicas, Isr: slices.Clone(replicas)}
 	}
 	return partitions
 }
@@ -189,6 +186,29 @@ func (f *FSM) applyDeleteTopic(cmd Command) error {
 		return fmt.Errorf("raft: topic %q does not exist", payload.Topic)
 	}
 	delete(f.state.Topics, payload.Topic)
+	return nil
+}
+
+func (f *FSM) applyUpdateISR(cmd Command) error {
+	payload, err := cmd.DecodeUpdateISR()
+	if err != nil {
+		return err
+	}
+	meta, ok := f.state.Topics[payload.Topic]
+	if !ok {
+		return fmt.Errorf("raft: topic %q does not exist", payload.Topic)
+	}
+	assignment, ok := meta.Partitions[payload.Partition]
+	if !ok {
+		return fmt.Errorf("raft: topic %q has no partition %d", payload.Topic, payload.Partition)
+	}
+	for _, id := range payload.ISR {
+		if !containsReplica(assignment.Replicas, id) {
+			return fmt.Errorf("raft: broker %d is not a replica of %s/%d", id, payload.Topic, payload.Partition)
+		}
+	}
+	assignment.Isr = slices.Clone(payload.ISR)
+	meta.Partitions[payload.Partition] = assignment
 	return nil
 }
 

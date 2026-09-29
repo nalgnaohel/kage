@@ -1,7 +1,5 @@
 {
-  "Resp1Err": "",
-  "Resp2Err": "",
-  "Resp3Err": "",
+  "RespErr": "",
   "State": {
     "Brokers": {
       "1": {
@@ -21,7 +19,7 @@
     },
     "Topics": {
       "orders": {
-        "NumPartitions": 3,
+        "NumPartitions": 1,
         "ReplicationFactor": 2,
         "Partitions": {
           "0": {
@@ -30,28 +28,7 @@
               2
             ],
             "Isr": [
-              1,
-              2
-            ]
-          },
-          "1": {
-            "Replicas": [
-              2,
               1
-            ],
-            "Isr": [
-              2,
-              1
-            ]
-          },
-          "2": {
-            "Replicas": [
-              1,
-              2
-            ],
-            "Isr": [
-              1,
-              2
             ]
           }
         }
