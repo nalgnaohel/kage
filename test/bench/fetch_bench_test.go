@@ -30,6 +30,7 @@ var benchCases = []struct {
 }{
 	{"Small_100Bx200recs", 200, 100},
 	{"Large_64KBx4recs", 4, 64 * 1024},
+	{"Huge_1MBx8recs", 8, 1024 * 1024},
 }
 
 func setupBenchSegment(b *testing.B, numRecords, size int) (*storage.Segment, []uint64) {

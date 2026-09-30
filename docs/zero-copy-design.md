@@ -9,7 +9,7 @@ Status: both Round 1 (Fetch) and Round 2 (Produce) are implemented and covered b
 `data.proto` no longer has `Fetch` or `Produce` — `GetMetadata`/`CommitOffset`/`GetOffset`/
 `ListOffsets` are all that's left on gRPC.
 
-Manual verification: **done** — see "Run 2026-09-20" in the Benchmark section below. `strace` confirmed
+Manual verification: **done** — see "Run 2026-09-20" in `docs/zero-copy-benchmark.md`. `strace` confirmed
 a real `sendfile(2)` syscall firing during a Fetch, and a produce-then-fetch round trip over a real
 running broker matched byte-for-byte.
 
@@ -126,44 +126,8 @@ that span is parsed; the caller transfers it as-is.
 
 ## Benchmark
 
-`test/bench/fetch_bench_test.go` compares the old decode-per-record approach (`seg.Read` per record →
-copy into a mirror `legacyFetchRecord` → `json.Marshal` → length-prefixed write) against the zero-copy
-path (`seg.LocateRange` → `seg.OpenReader` → `EncodeFetchResponseHeader` → `io.CopyN`), both over a
-real loopback TCP connection, across two sub-cases: `Small_100Bx200recs` (200 records × 100 bytes) and
-`Large_64KBx4recs` (4 records × 64 KB).
-
-Representative output (`go test ./test/bench/... -bench=. -benchmem`):
-
-```
-BenchmarkFetch_LegacyDecode/Small_100Bx200recs-12    1122   1017376 ns/op   111758 B/op    412 allocs/op
-BenchmarkFetch_LegacyDecode/Large_64KBx4recs-12      3223    369034 ns/op  1015727 B/op     16 allocs/op
-BenchmarkFetch_ZeroCopy/Small_100Bx200recs-12      115058       9953 ns/op      344 B/op      9 allocs/op
-BenchmarkFetch_ZeroCopy/Large_64KBx4recs-12         34196      31122 ns/op      344 B/op      9 allocs/op
-```
-
-The shape matches the prediction: `BenchmarkFetch_ZeroCopy`'s `B/op`/`allocs/op` stay constant
-regardless of record count or payload size (just the fixed 30-byte header buffer plus file-handle
-bookkeeping), while `BenchmarkFetch_LegacyDecode`'s allocations scale with record count (412 allocs at
-200 small records) and its bytes scale with payload size (~1 MB copied for the 4×64 KB case) — the gap
-between the two widens most at `Large_64KBx4recs`, since zero-copy's advantage tracks payload size, not
-record count.
-
-`-benchmem` can't observe the `sendfile(2)` syscall itself, only its absence of allocation. To confirm
-it directly: run the broker, issue a real Fetch, and watch `strace -f -e trace=sendfile -p <pid>` for a
-`sendfile` line — a manual, one-time check, not part of the automated suite.
-
-`cmd/manualverify/main.go` is that manual client: `go run ./cmd/kage` the broker, then `go run ./cmd/manualverify`
-against it — it creates a topic over the `kadmin` gRPC port, produces one record over the raw port, and
-fetches it back, printing whether the round-tripped value matches. Wrapping the broker's pid with
-`strace -f -e trace=sendfile -p <pid>` while this runs is the other half of the manual check above.
-
-Run 2026-09-20: the produce+fetch round trip matched end to end
-(`Fetch: highWatermark=2 value="hello-zero-copy" match=true`), and `strace -f -e trace=sendfile -p <pid>`
-against the running broker during that fetch showed the syscall firing directly:
-
-```
-sendfile(11, 12, NULL, 27) = 27
-```
-
-confirming the kernel copies record bytes straight from the segment file (fd 12) to the client socket
-(fd 11) with no user-space buffer in between, exactly as designed.
+See `docs/zero-copy-benchmark.md` for the full methodology, results (including the manual `strace`
+`sendfile(2)` verification), and known limitations of the comparison. Short version: zero-copy Fetch's
+`B/op`/`allocs/op` stay constant (~350 B, 9 allocs) regardless of payload size, while the old
+decode-per-record shape's byte cost scales with payload size — at 8 MB of records, zero-copy is ~8.4x
+faster and allocates ~136,000x fewer bytes per op.
