@@ -1,0 +1,103 @@
+<svg viewBox="0 0 1240 820" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#15803d"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1240" height="820" fill="#ffffff"/>
+
+  <text x="620" y="28" font-size="19" font-weight="700" text-anchor="middle" fill="#0f172a">Vết thực thi Log.Read(offset=125) → Segment → .index → physical position</text>
+
+  <!-- ================= Tier 1: Log routes by ABSOLUTE offset ================= -->
+  <rect x="40" y="45" width="1160" height="215" rx="10" fill="none" stroke="#94a3b8" stroke-width="2"/>
+  <text x="60" y="72" font-size="15" font-weight="600" fill="#0f172a">① Log.Read(offset=125): sort.Search theo ABSOLUTE offset → chọn Segment</text>
+
+  <g font-family="Consolas, Menlo, monospace" font-size="12">
+    <rect x="70" y="90" width="320" height="100" rx="6" fill="#f8fafc" stroke="#334155" stroke-width="1.5"/>
+    <text x="230" y="116" text-anchor="middle" font-weight="700" fill="#0f172a">Segment #0</text>
+    <text x="230" y="140" text-anchor="middle" fill="#334155">base=0  next=120</text>
+    <text x="230" y="164" text-anchor="middle" fill="#334155">range [0, 120)</text>
+
+    <rect x="420" y="90" width="320" height="100" rx="6" fill="#fffbeb" stroke="#b45309" stroke-width="3"/>
+    <text x="580" y="116" text-anchor="middle" font-weight="700" fill="#78350f">Segment #1</text>
+    <text x="580" y="140" text-anchor="middle" fill="#78350f">base=120  next=250</text>
+    <text x="580" y="164" text-anchor="middle" fill="#78350f">range [120, 250)</text>
+
+    <rect x="770" y="90" width="320" height="100" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="930" y="116" text-anchor="middle" font-weight="700" fill="#1e3a8a">Segment #2 (active)</text>
+    <text x="930" y="140" text-anchor="middle" fill="#1e3a8a">base=250  next=278</text>
+    <text x="930" y="164" text-anchor="middle" fill="#1e3a8a">range [250, 278)</text>
+  </g>
+
+  <line x1="392" y1="128" x2="418" y2="128" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="742" y1="128" x2="768" y2="128" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <text x="70" y="213" font-size="12.5" fill="#334155">Read(offset): sort.Search → segment mà range chứa offset đó</text>
+  <text x="70" y="235" font-size="12.5" fill="#334155">VD: offset=125 ∈ Segment #1's range [120, 250) (viền cam)</text>
+
+  <line x1="580" y1="260" x2="580" y2="300" stroke="#b45309" stroke-width="2.5" marker-end="url(#arrowAmber)"/>
+  <text x="600" y="282" font-size="12.5" font-style="italic" fill="#78350f">offset=125 thuộc Segment #1</text>
+
+  <!-- ================= Translation band ================= -->
+  <rect x="300" y="300" width="560" height="90" rx="10" fill="#fffbeb" stroke="#b45309" stroke-width="3"/>
+  <text x="580" y="328" text-anchor="middle" font-size="14" font-weight="700" fill="#78350f">② Segment#1.Read(125): relOffset = offset − baseOffset</text>
+  <text x="580" y="352" text-anchor="middle" font-size="18" font-weight="700" font-family="Consolas, Menlo, monospace" fill="#78350f">125 − 120 = 5</text>
+  <text x="580" y="375" text-anchor="middle" font-size="12" font-style="italic" fill="#92400e">từ đây .index chỉ biết relOffset=5 — không còn biết offset tuyệt đối 125</text>
+
+  <path d="M 580 390 L 580 410 L 185 410 L 185 476" fill="none" stroke="#b45309" stroke-width="2.5" marker-end="url(#arrowAmber)"/>
+
+  <!-- ================= Tier 2: Segment translates RELATIVE offset via .index ================= -->
+  <rect x="40" y="430" width="1160" height="360" rx="10" fill="none" stroke="#94a3b8" stroke-width="2"/>
+  <text x="60" y="457" font-size="15" font-weight="600" fill="#0f172a">Trong Segment #1: RELATIVE offset → physical position, qua .index (mmap, sparse)</text>
+
+  <g font-family="Consolas, Menlo, monospace" font-size="11.5">
+    <rect x="70" y="476" width="230" height="44" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+    <text x="185" y="503" text-anchor="middle" fill="#14532d">relOffset=0 → physPos=0</text>
+
+    <rect x="850" y="476" width="230" height="44" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+    <text x="965" y="503" text-anchor="middle" fill="#14532d">relOffset=34 → physPos=P</text>
+  </g>
+  <text x="330" y="503" font-size="11.5" font-style="italic" fill="#15803d">③ Index.Read(5): binary search → nearest ≤ 5 → physPos=0</text>
+
+  <path d="M 185 520 L 185 549 L 615 549 L 615 576" fill="none" stroke="#15803d" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+  <text x="400" y="542" text-anchor="middle" font-size="11.5" font-style="italic" fill="#15803d">④ seek pos=0 + linear-scan: 120 → 121 → … → 125</text>
+  <line x1="965" y1="520" x2="965" y2="576" stroke="#15803d" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <g font-family="Consolas, Menlo, monospace" font-size="11.5">
+    <rect x="70" y="576" width="230" height="85" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="185" y="597" text-anchor="middle" fill="#78350f">offset=120 (8B)</text>
+    <text x="185" y="613" text-anchor="middle" fill="#78350f">len (4B) + payload</text>
+    <text x="185" y="629" text-anchor="middle" fill="#78350f">pos=0, indexed</text>
+
+    <rect x="320" y="576" width="160" height="85" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="400" y="597" text-anchor="middle" fill="#78350f">offsets</text>
+    <text x="400" y="613" text-anchor="middle" fill="#78350f">121 – 124</text>
+    <text x="400" y="629" text-anchor="middle" fill="#78350f">(not indexed)</text>
+
+    <rect x="500" y="576" width="230" height="85" rx="6" fill="#ede9fe" stroke="#6d28d9" stroke-width="2.5"/>
+    <text x="615" y="597" text-anchor="middle" fill="#4c1d95">offset=125 (8B)</text>
+    <text x="615" y="613" text-anchor="middle" fill="#4c1d95">len (4B) + payload</text>
+    <text x="615" y="629" text-anchor="middle" fill="#4c1d95">Read(125) target</text>
+
+    <text x="790" y="624" font-size="20" fill="#64748b" text-anchor="middle">…</text>
+
+    <rect x="850" y="576" width="230" height="85" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="965" y="597" text-anchor="middle" fill="#78350f">offset=154 (8B)</text>
+    <text x="965" y="613" text-anchor="middle" fill="#78350f">len (4B) + payload</text>
+    <text x="965" y="629" text-anchor="middle" fill="#78350f">pos=P, indexed</text>
+  </g>
+
+  <rect x="70" y="672" width="1100" height="50" rx="8" fill="#ede9fe" stroke="#6d28d9" stroke-width="2"/>
+  <text x="90" y="692" font-size="13" font-weight="700" fill="#4c1d95">⑤ Kết quả: tìm được physical position của offset=125 trong Segment#1.log</text>
+  <text x="90" y="710" font-size="11.5" font-style="italic" fill="#6d28d9">.index chỉ cho entry gần nhất (physPos=0) — bước scan ở ④ mới là bước thực sự tìm ra vị trí byte chính xác</text>
+
+  <text x="70" y="742" font-size="12.5" fill="#334155">Sparse: .index chỉ lưu record đầu segment + mỗi khi tích đủ IndexIntervalBytes (4KB), không lưu mọi record.</text>
+  <text x="70" y="762" font-size="12.5" fill="#334155">Mỗi Segment có file .index RIÊNG của nó (&lt;baseOffset&gt;.index) — không có 1 index chung cho toàn bộ Log.</text>
+</svg>

@@ -18,76 +18,10 @@ and mmap-friendly while keeping lookups fast in practice.
 
 ## Layout at a glance
 
-```
-+--------------------------------------------------------------------+
-| Log  (one directory per partition, e.g. data/orders-0/)            |
-|                                                                    |
-| segments[]  (ordered by baseOffset, ascending):                    |
-|                                                                    |
-|   +--------------+   +--------------+   +--------------+           |
-|   | Segment #0   |   | Segment #1   |   | Segment #2   |           |
-|   | base = 0     |   | base = 120   |   | base = 250   |           |
-|   | next = 120   |   | next = 250   |   | next = 278   |           |
-|   | [0, 120)     |   | [120, 250)   |   | [250, 278)   |           |
-|   +--------------+   +--------------+   +--------------+           |
-|                                                                    |
-|   activeSegment = the last segment in the slice (Segment #2 above) |
-|                                                                    |
-| Read(offset):                                                      |
-|   sort.Search(segments, seg.nextOffset > offset)                   |
-|   -> pick the segment whose [baseOffset, nextOffset) range         |
-|      contains offset, then delegate to it                          |
-|                                                                    |
-| Append(data):                                                      |
-|   if activeSegment would exceed MaxSegmentSize                     |
-|   -> newSegment(activeSegment.nextOffset), append there            |
-+--------------------------------------------------------------------+
+![Log → Segment → Index: directory layout, the .log/.index file pair, and a Read(125) walkthrough](images/storage-log-segment-index.svg)
 
-  each Segment = one file pair on disk:
-
-    00000000000000000000.log   00000000000000000000.index
-    00000000000000000120.log   00000000000000000120.index
-    00000000000000000250.log   00000000000000000250.index
-        (filename = baseOffset, zero-padded to 20 digits)
-
-+------------------------------------------------------------------------------------------------+
-| Segment #1 (base = 120)                                                                        |
-|                                                                                                |
-| .log  (append-only; each record = 12-byte header + payload)                                    |
-|                                                                                                |
-| +-------------+----------+-----------+  +-------------+----------+---------+                   |
-| | offset (8B) | len (4B) | payload   |  | offset (8B) | len (4B) | payload |                   |
-| +-------------+----------+-----------+  +-------------+----------+---------+                   |
-| | = 120, BE   | = N, BE  | (N bytes) |  | = 121, BE   |          |         |                   |
-| +-------------+----------+-----------+  +-------------+----------+---------+                   |
-|   ...                                                                                          |
-|                                                                                                |
-|   the first record starts at pos = 0; each next record starts at                               |
-|   pos + 12 + len(payload), and so on                                                           |
-|                                                                                                |
-| .index  (mmap via gommap; each entry = 8 bytes; SPARSE - not every record)                     |
-|                                                                                                |
-| +----------------+-------------+                                                               |
-| | relOffset = 0  | physPos = 0 |   <- the segment's first record is always indexed (pos == 0), |
-|                                         so a lookup at baseOffset never scans from byte 0      |
-| +----------------+-------------+                                                               |
-| | relOffset = 34 | physPos = ? |   <- next entry once bytesSinceIndex >= IndexIntervalBytes    |
-|                                         (4 KB by default)                                      |
-| +----------------+-------------+                                                               |
-|                                                                                                |
-|   (the file is truncated to MaxIndexSize up front for the mmap;                                |
-|    Close() truncates it back down to the actual used size)                                     |
-|                                                                                                |
-| Read(offset = 125):                                                                            |
-|   1. relOffset = 125 - 120 = 5                                                                 |
-|   2. Index.Read(5) -> binary search -> nearest entry with relOffset <= 5                       |
-|      (io.EOF, not a panic, if 5 is smaller than every stored entry)                            |
-|   3. Seek the .log file to that entry's physPos, then LINEAR-SCAN                              |
-|      forward record by record (reading each header) until                                      |
-|      actualOffset == 125 (or actualOffset > 125 -> "not found")                                |
-|      -> this scan is exactly what makes a sparse index safe                                    |
-+------------------------------------------------------------------------------------------------+
-```
+Each `Segment` is one file pair on disk, named after its base offset zero-padded to 20 digits
+(`00000000000000000000.log` / `.index`, `00000000000000000120.log` / `.index`, ...).
 
 ## Components
 
