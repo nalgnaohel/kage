@@ -16,6 +16,7 @@ import (
 	"github.com/nalgnaohel/kage/api/rawdata"
 	"github.com/nalgnaohel/kage/broker"
 	"github.com/nalgnaohel/kage/raft"
+	"github.com/nalgnaohel/kage/replication"
 	"github.com/nalgnaohel/kage/storage"
 
 	pb "github.com/nalgnaohel/kage/api/rpc/kadmin"
@@ -97,6 +98,15 @@ func main() {
 		log.Fatalf("listen: %v", err)
 	}
 	rawSrv := rawdata.NewServer(reg)
+
+	tracker := replication.NewLeaderTracker(node, reg)
+	rawSrv.OnReplicaFetch = tracker.OnReplicaFetch
+	rawSrv.WaitForHW = tracker.WaitForHW
+	go tracker.Run(context.Background())
+
+	fetcherManager := replication.NewFetcherManager(node, reg)
+	go fetcherManager.Run(context.Background())
+
 	go func() {
 		log.Printf("raw data-plane server listening on %s", *rawAddr)
 		if err := rawSrv.Serve(rawLn); err != nil {
