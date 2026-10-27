@@ -7,11 +7,13 @@
       "Partitions": {
         "0": {
           "Replicas": [],
-          "Isr": []
+          "Isr": [],
+          "LeaderEpoch": 0
         },
         "1": {
           "Replicas": [],
-          "Isr": []
+          "Isr": [],
+          "LeaderEpoch": 0
         }
       }
     }

@@ -85,7 +85,14 @@ func main() {
 		}
 		go registerSelf(node, selfInfo)
 	} else if *joinAddr != "" {
-		if err := joinCluster(*joinAddr, raft.JoinRequest(selfInfo)); err != nil {
+		joinReq := raft.JoinRequest{
+			BrokerID: selfInfo.BrokerID,
+			Host:     selfInfo.Host,
+			Port:     selfInfo.Port,
+			RaftAddr: selfInfo.RaftAddr,
+			RawAddr:  selfInfo.RawAddr,
+		}
+		if err := joinCluster(*joinAddr, joinReq); err != nil {
 			log.Fatalf("raft: join cluster: %v", err)
 		}
 	}

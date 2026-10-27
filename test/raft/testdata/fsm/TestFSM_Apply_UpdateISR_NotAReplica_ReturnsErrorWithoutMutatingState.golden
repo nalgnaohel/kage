@@ -7,7 +7,8 @@
         "Host": "localhost",
         "Port": 9092,
         "RaftAddr": "127.0.0.1:9094",
-        "RawAddr": ""
+        "RawAddr": "",
+        "LastHeartbeat": 0
       }
     },
     "Topics": {
@@ -21,7 +22,8 @@
             ],
             "Isr": [
               1
-            ]
+            ],
+            "LeaderEpoch": 0
           }
         }
       }

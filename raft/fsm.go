@@ -12,16 +12,18 @@ import (
 )
 
 type BrokerInfo struct {
-	BrokerID int32
-	Host     string
-	Port     int32
-	RaftAddr string
-	RawAddr  string
+	BrokerID      int32
+	Host          string
+	Port          int32
+	RaftAddr      string
+	RawAddr       string
+	LastHeartbeat int64
 }
 
 type PartitionAssignment struct {
-	Replicas []int32
-	Isr      []int32
+	Replicas    []int32
+	Isr         []int32
+	LeaderEpoch int32
 }
 
 type TopicMeta struct {
@@ -106,6 +108,8 @@ func (f *FSM) Apply(l *hraft.Log) any {
 		applyErr = f.applyDeleteTopic(cmd)
 	case CmdUpdateISR:
 		applyErr = f.applyUpdateISR(cmd)
+	case CmdElectLeader:
+		applyErr = f.applyElectLeader(cmd)
 	default:
 		applyErr = fmt.Errorf("raft: unknown command type %q", cmd.Type)
 	}
@@ -125,11 +129,12 @@ func (f *FSM) applyRegisterBroker(cmd Command) error {
 		return err
 	}
 	f.state.Brokers[payload.BrokerID] = BrokerInfo{
-		BrokerID: payload.BrokerID,
-		Host:     payload.Host,
-		Port:     payload.Port,
-		RaftAddr: payload.RaftAddr,
-		RawAddr:  payload.RawAddr,
+		BrokerID:      payload.BrokerID,
+		Host:          payload.Host,
+		Port:          payload.Port,
+		RaftAddr:      payload.RaftAddr,
+		RawAddr:       payload.RawAddr,
+		LastHeartbeat: payload.Timestamp,
 	}
 	return nil
 }
@@ -210,6 +215,39 @@ func (f *FSM) applyUpdateISR(cmd Command) error {
 	assignment.Isr = slices.Clone(payload.ISR)
 	meta.Partitions[payload.Partition] = assignment
 	return nil
+}
+
+func (f *FSM) applyElectLeader(cmd Command) error {
+	payload, err := cmd.DecodeElectLeader()
+	if err != nil {
+		return err
+	}
+	meta, ok := f.state.Topics[payload.Topic]
+	if !ok {
+		return fmt.Errorf("raft: topic %q does not exist", payload.Topic)
+	}
+	assignment, ok := meta.Partitions[payload.Partition]
+	if !ok {
+		return fmt.Errorf("raft: topic %q has no partition %d", payload.Topic, payload.Partition)
+	}
+	if !containsReplica(assignment.Isr, payload.NewLeader) {
+		return fmt.Errorf("raft: broker %d is not in the ISR of %s/%d", payload.NewLeader, payload.Topic, payload.Partition)
+	}
+	assignment.Replicas = leaderFirst(assignment.Replicas, payload.NewLeader)
+	assignment.LeaderEpoch++
+	meta.Partitions[payload.Partition] = assignment
+	return nil
+}
+
+func leaderFirst(replicas []int32, leader int32) []int32 {
+	out := make([]int32, 0, len(replicas))
+	out = append(out, leader)
+	for _, id := range replicas {
+		if id != leader {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (f *FSM) Snapshot() (hraft.FSMSnapshot, error) {

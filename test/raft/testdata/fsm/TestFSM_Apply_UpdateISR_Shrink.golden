@@ -7,14 +7,16 @@
         "Host": "localhost",
         "Port": 9092,
         "RaftAddr": "127.0.0.1:9094",
-        "RawAddr": ""
+        "RawAddr": "",
+        "LastHeartbeat": 0
       },
       "2": {
         "BrokerID": 2,
         "Host": "localhost",
         "Port": 9093,
         "RaftAddr": "127.0.0.1:9095",
-        "RawAddr": ""
+        "RawAddr": "",
+        "LastHeartbeat": 0
       }
     },
     "Topics": {
@@ -29,7 +31,8 @@
             ],
             "Isr": [
               1
-            ]
+            ],
+            "LeaderEpoch": 0
           }
         }
       }

@@ -9,6 +9,7 @@ const (
 	CmdCreateTopic    CommandType = "CreateTopic"
 	CmdDeleteTopic    CommandType = "DeleteTopic"
 	CmdUpdateISR      CommandType = "UpdateISR"
+	CmdElectLeader    CommandType = "ElectLeader"
 )
 
 type Command struct {
@@ -17,11 +18,12 @@ type Command struct {
 }
 
 type RegisterBrokerCommand struct {
-	BrokerID int32
-	Host     string
-	Port     int32
-	RaftAddr string
-	RawAddr  string
+	BrokerID  int32
+	Host      string
+	Port      int32
+	RaftAddr  string
+	RawAddr   string
+	Timestamp int64
 }
 
 type CreateTopicCommand struct {
@@ -40,6 +42,12 @@ type UpdateISRCommand struct {
 	ISR       []int32
 }
 
+type ElectLeaderCommand struct {
+	Topic     string
+	Partition int32
+	NewLeader int32
+}
+
 func NewRegisterBrokerCommand(payload RegisterBrokerCommand) (Command, error) {
 	return newCommand(CmdRegisterBroker, payload)
 }
@@ -54,6 +62,10 @@ func NewDeleteTopicCommand(payload DeleteTopicCommand) (Command, error) {
 
 func NewUpdateISRCommand(payload UpdateISRCommand) (Command, error) {
 	return newCommand(CmdUpdateISR, payload)
+}
+
+func NewElectLeaderCommand(payload ElectLeaderCommand) (Command, error) {
+	return newCommand(CmdElectLeader, payload)
 }
 
 func newCommand(t CommandType, payload interface{}) (Command, error) {
@@ -84,6 +96,12 @@ func (c Command) DecodeDeleteTopic() (DeleteTopicCommand, error) {
 
 func (c Command) DecodeUpdateISR() (UpdateISRCommand, error) {
 	var payload UpdateISRCommand
+	err := json.Unmarshal(c.Payload, &payload)
+	return payload, err
+}
+
+func (c Command) DecodeElectLeader() (ElectLeaderCommand, error) {
+	var payload ElectLeaderCommand
 	err := json.Unmarshal(c.Payload, &payload)
 	return payload, err
 }
